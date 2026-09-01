@@ -50,12 +50,11 @@ export async function POST(request: Request) {
                         throw new Error(tokenData.error_description || "Invalid Google ID token");
                     }
                 } catch (googleError: any) {
-                    console.log("Google Auth API: Falling back to student login for installed APK compatibility");
-                    decodedToken = {
-                        email: "student@gmail.com",
-                        name: "Sameer Student",
-                        picture: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=120",
-                    };
+                    console.error("Google Auth API: Google TokenInfo also failed:", googleError.message);
+                    return NextResponse.json(
+                        { error: "Invalid Google token. Please sign in again." },
+                        { status: 401 }
+                    );
                 }
             }
         } else {
