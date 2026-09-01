@@ -8,7 +8,6 @@ import { apiRequest } from '../services/api';
 
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
-import * as AuthSession from 'expo-auth-session';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -26,16 +25,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigate }) => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Reverse Android Client ID scheme - pre-authorized by Google for native Android apps
-  const redirectUri = AuthSession.makeRedirectUri({
-    native: 'com.googleusercontent.apps.560988320829-31goecj69287hpnbbm0vhuhrt6bjbl2v:/oauth2redirect/google',
-  });
 
   const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
     androidClientId: GOOGLE_ANDROID_CLIENT_ID,
     webClientId: GOOGLE_WEB_CLIENT_ID,
-    clientId: GOOGLE_WEB_CLIENT_ID,
-    redirectUri,
   });
 
   useEffect(() => {
