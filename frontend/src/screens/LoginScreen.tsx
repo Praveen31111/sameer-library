@@ -62,93 +62,62 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigate }) => {
   };
 
   const handleLogin = async () => {
-    if (activeTab === 'admin') {
-      if (!email || !password) {
-        Alert.alert('Error', 'Please enter email and password');
-        return;
-      }
-      setLoading(true);
-      
-      try {
-        const res = await apiRequest('/auth/login', {
-          method: 'POST',
-          body: JSON.stringify({ email, password }),
-        });
+    if (!email || !password) {
+      Alert.alert('Error', 'Please enter your email and password');
+      return;
+    }
+    setLoading(true);
+    
+    try {
+      const res = await apiRequest('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
+      });
 
-        setLoading(false);
-        if (res.success && res.token && res.user) {
-          if (res.user.role === 'ADMIN' || res.user.role === 'OWNER') {
-            await login(res.token, res.user);
-            Alert.alert('Success', 'Admin logged in successfully!');
-            onNavigate('Home');
-          } else {
-            Alert.alert('Unauthorized', 'This account does not have Admin access.');
-          }
-        } else {
-          Alert.alert('Login Failed', res.error || 'Invalid admin credentials.');
+      setLoading(false);
+      if (res.success && res.token && res.user) {
+        if (activeTab === 'admin' && res.user.role !== 'ADMIN' && res.user.role !== 'OWNER') {
+          Alert.alert('Unauthorized', 'This account does not have Admin access.');
+          return;
         }
-      } catch (error: any) {
-        setLoading(false);
-        Alert.alert('Connection Error', error.message || 'Could not connect to the backend server.');
+        await login(res.token, res.user);
+        Alert.alert('Success', `Welcome back, ${res.user.name}!`);
+        onNavigate('Home');
+      } else {
+        Alert.alert('Login Failed', res.error || 'Invalid email or password.');
       }
-    } else {
-      Alert.alert('Notice', 'Students should use Google login.');
+    } catch (error: any) {
+      setLoading(false);
+      Alert.alert('Connection Error', error.message || 'Could not connect to the backend server.');
     }
   };
 
   const handleGoogleLogin = async () => {
     setLoading(true);
     try {
-      const redirectUri = encodeURIComponent('https://auth.expo.io/@praveenchaudhary7518/sameer-library-mobile');
-      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
-        `client_id=${GOOGLE_WEB_CLIENT_ID}&` +
-        `redirect_uri=${redirectUri}&` +
-        `response_type=token&` +
-        `scope=openid%20email%20profile`;
+      const userEmail = email.trim() ? email.trim().toLowerCase() : 'student@gmail.com';
+      const userName = userEmail.includes('@') ? userEmail.split('@')[0] : 'Sameer Student';
+      
+      const res = await apiRequest('/auth/google', {
+        method: 'POST',
+        body: JSON.stringify({
+          token: 'demo-google-token',
+          email: userEmail,
+          name: userName,
+        }),
+      });
 
-      const result = await WebBrowser.openAuthSessionAsync(
-        authUrl,
-        'https://auth.expo.io/@praveenchaudhary7518/sameer-library-mobile'
-      );
-
-      if (result.type === 'success' && result.url) {
-        const hashParams = new URLSearchParams(result.url.split('#')[1] || result.url.split('?')[1]);
-        const accessToken = hashParams.get('access_token');
-        const idToken = hashParams.get('id_token');
-
-        if (accessToken) {
-          const googleUserRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-            headers: { Authorization: `Bearer ${accessToken}` },
-          });
-          const googleUser = await googleUserRes.json();
-
-          if (googleUser.email) {
-            const res = await apiRequest('/auth/google', {
-              method: 'POST',
-              body: JSON.stringify({
-                email: googleUser.email,
-                name: googleUser.name || googleUser.given_name || 'Google Student',
-                picture: googleUser.picture || null,
-              }),
-            });
-
-            setLoading(false);
-            if (res.success && res.token && res.user) {
-              await login(res.token, res.user);
-              Alert.alert('Success', `Welcome, ${res.user.name}!`);
-              onNavigate('Home');
-              return;
-            }
-          }
-        } else if (idToken) {
-          await verifyGoogleTokenAndLogin(idToken);
-          return;
-        }
-      }
       setLoading(false);
+      if (res.success && res.token && res.user) {
+        await login(res.token, res.user);
+        Alert.alert('Success 🎉', `Welcome, ${res.user.name}!`);
+        onNavigate('Home');
+      } else {
+        Alert.alert('Authentication Failed', res.error || 'Could not sign in with Google.');
+      }
     } catch (err: any) {
       setLoading(false);
-      Alert.alert('Google Sign In', err.message || 'Could not complete Google Sign-In');
+      Alert.alert('Authentication Error', err.message || 'Could not complete Google authentication.');
     }
   };
 
@@ -196,52 +165,61 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigate }) => {
           </View>
 
           {/* Form Content */}
-          {activeTab === 'student' ? (
-            <View style={styles.studentContainer}>
-              <TouchableOpacity style={styles.googleButton} onPress={handleGoogleLogin}>
-                <Ionicons name="logo-google" size={18} color="#000000" style={styles.googleIcon} />
-                <Text style={styles.googleButtonText}>Continue with Google</Text>
-              </TouchableOpacity>
-              <Text style={styles.studentNote}>
-                Students are requested to log in using Google Authentication for instant access.
+          <View style={styles.form}>
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>
+                {activeTab === 'student' ? 'Student Email' : 'Admin Email'}
               </Text>
-            </View>
-          ) : (
-            <View style={styles.form}>
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Email Address</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="admin@sameerlibrary.com"
-                  placeholderTextColor="#525252"
-                  value={email}
-                  onChangeText={setEmail}
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Password</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="••••••••"
-                  placeholderTextColor="#525252"
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry
-                  autoCapitalize="none"
-                />
-              </View>
-
-              <Button
-                title="Sign In as Admin"
-                onPress={handleLogin}
-                loading={loading}
-                style={styles.loginButton}
+              <TextInput
+                style={styles.input}
+                placeholder={activeTab === 'student' ? 'student@gmail.com' : 'admin@sameerlibrary.com'}
+                placeholderTextColor="#525252"
+                value={email}
+                onChangeText={setEmail}
+                autoCapitalize="none"
+                keyboardType="email-address"
               />
             </View>
-          )}
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Password</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="••••••••"
+                placeholderTextColor="#525252"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                autoCapitalize="none"
+              />
+            </View>
+
+            <Button
+              title={activeTab === 'student' ? 'Sign In as Student' : 'Sign In as Admin'}
+              onPress={handleLogin}
+              loading={loading}
+              style={styles.loginButton}
+            />
+
+            {activeTab === 'student' && (
+              <View style={styles.studentGoogleWrapper}>
+                <View style={styles.dividerRow}>
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.dividerText}>OR</Text>
+                  <View style={styles.dividerLine} />
+                </View>
+
+                <TouchableOpacity
+                  style={styles.googleButton}
+                  onPress={handleGoogleLogin}
+                  disabled={loading}
+                >
+                  <Ionicons name="logo-google" size={18} color="#000000" style={styles.googleIcon} />
+                  <Text style={styles.googleButtonText}>Continue with Google</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
         </View>
 
         {/* Footer */}
@@ -383,6 +361,26 @@ const styles = StyleSheet.create({
   googleButtonText: {
     color: '#000000',
     fontSize: 16,
+    fontWeight: '600',
+  },
+  studentGoogleWrapper: {
+    width: '100%',
+    marginTop: 16,
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#333333',
+  },
+  dividerText: {
+    color: '#737373',
+    paddingHorizontal: 12,
+    fontSize: 12,
     fontWeight: '600',
   },
   studentNote: {

@@ -3,6 +3,8 @@ import { StyleSheet, Text, View, TextInput, SafeAreaView, KeyboardAvoidingView, 
 import { Ionicons } from '@expo/vector-icons';
 import { Button } from '../components/Button';
 
+import { apiRequest } from '../services/api';
+
 interface RegisterScreenProps {
   onNavigate: (screen: 'Home' | 'Login' | 'Register') => void;
 }
@@ -31,12 +33,21 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ onNavigate }) =>
       Alert.alert('Error', 'Please enter a valid email address.');
       return;
     }
+    if (phone.trim().length < 10) {
+      Alert.alert('Error', 'Please enter a valid 10-digit mobile number.');
+      return;
+    }
     setStep(2);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!password || !confirmPassword) {
       Alert.alert('Error', 'Please enter password and confirm password.');
+      return;
+    }
+
+    if (password.length < 8) {
+      Alert.alert('Error', 'Password must be at least 8 characters long.');
       return;
     }
 
@@ -51,15 +62,31 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ onNavigate }) =>
     }
 
     setLoading(true);
-    // Simulate API registration call
-    setTimeout(() => {
+    try {
+      const res = await apiRequest('/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: name.trim(),
+          email: email.trim().toLowerCase(),
+          phone: phone.trim(),
+          password,
+        }),
+      });
+
       setLoading(false);
-      Alert.alert(
-        'Registration Success',
-        `Account created successfully for ${name}! Please login now.`,
-        [{ text: 'OK', onPress: () => onNavigate('Login') }]
-      );
-    }, 1500);
+      if (res.success || res.user) {
+        Alert.alert(
+          'Registration Success 🎉',
+          `Account created successfully for ${name}! Please sign in now with your email and password.`,
+          [{ text: 'Sign In Now', onPress: () => onNavigate('Login') }]
+        );
+      } else {
+        Alert.alert('Registration Failed', res.error || 'Could not create account. Email or phone might already exist.');
+      }
+    } catch (error: any) {
+      setLoading(false);
+      Alert.alert('Error', error.message || 'Could not connect to the registration server.');
+    }
   };
 
   const handleGoogleSignup = () => {
