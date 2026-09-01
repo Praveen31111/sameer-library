@@ -17,6 +17,19 @@
     "android": {
       "package": "com.praveen.sameerlibrary",
       "googleServicesFile": "./google-services.json",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "com.googleusercontent.apps.560988320829-31goecj69287hpnbbm0vhuhrt6bjbl2v",
+              "path": "/oauth2redirect/google"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0b192c"
