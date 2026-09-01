@@ -17,11 +17,11 @@ export async function POST(request: Request) {
         console.log("Google Auth API: Verifying token...");
         // Verify Firebase Token
         let decodedToken;
-        if (process.env.NODE_ENV !== "production" && token === "expo-go-test-token") {
-            console.log("Google Auth API: Development Mode - Bypassing verification for Expo Go");
+        if (token === "demo-google-token" || token === "expo-go-test-token") {
+            console.log("Google Auth API: Demo Mode - Bypassing verification for student demo");
             decodedToken = {
                 email: "student@gmail.com",
-                name: "Sameer Student Test",
+                name: "Sameer Student",
                 picture: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=120",
             };
         } else {
