@@ -97,10 +97,34 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigate }) => {
   };
 
   const handleGoogleLogin = async () => {
-    if (request) {
-      promptAsync();
-    } else {
-      verifyGoogleTokenAndLogin("demo-google-token");
+    setLoading(true);
+    try {
+      const redirectUri = encodeURIComponent('https://sameer-library-72fc9.firebaseapp.com/__/auth/handler');
+      const nonce = Math.random().toString(36).substring(2);
+      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+        `client_id=${GOOGLE_WEB_CLIENT_ID}&` +
+        `redirect_uri=${redirectUri}&` +
+        `response_type=id_token&` +
+        `scope=openid%20email%20profile&` +
+        `nonce=${nonce}`;
+
+      const result = await WebBrowser.openAuthSessionAsync(
+        authUrl,
+        'https://sameer-library-72fc9.firebaseapp.com/__/auth/handler'
+      );
+
+      if (result.type === 'success' && result.url) {
+        const hashParams = new URLSearchParams(result.url.split('#')[1] || result.url.split('?')[1]);
+        const idToken = hashParams.get('id_token');
+        if (idToken) {
+          await verifyGoogleTokenAndLogin(idToken);
+          return;
+        }
+      }
+      setLoading(false);
+    } catch (err: any) {
+      setLoading(false);
+      Alert.alert('Google Sign In', err.message || 'Could not complete Google Sign-In');
     }
   };
 
