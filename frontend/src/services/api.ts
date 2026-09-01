@@ -9,8 +9,10 @@ const getLocalIp = () => {
 };
 
 const LOCAL_API_URL = `http://${getLocalIp()}:3000/api`;
+const ENV_API_URL = process.env.EXPO_PUBLIC_API_URL;
 
-export const API_URL = __DEV__ ? LOCAL_API_URL : 'https://your-production-url.com/api';
+export const API_URL = ENV_API_URL || (__DEV__ ? LOCAL_API_URL : 'http://localhost:3000/api');
+
 
 /**
  * Basic fetch wrapper with support for JSON and auth headers
