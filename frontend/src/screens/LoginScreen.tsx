@@ -6,9 +6,16 @@ import { useAuth } from '../context/AuthContext';
 import Constants from 'expo-constants';
 import { apiRequest } from '../services/api';
 
+import * as WebBrowser from 'expo-web-browser';
+import * as Google from 'expo-auth-session/providers/google';
+
+WebBrowser.maybeCompleteAuthSession();
+
 interface LoginScreenProps {
   onNavigate: (screen: 'Home' | 'Login' | 'Register') => void;
 }
+
+const GOOGLE_WEB_CLIENT_ID = '560988320829-vn69cuihidkuvrt3cqhv62av9s1ja5sm.apps.googleusercontent.com';
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigate }) => {
   const { login } = useAuth();
@@ -17,7 +24,42 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigate }) => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
+    clientId: GOOGLE_WEB_CLIENT_ID,
+    webClientId: GOOGLE_WEB_CLIENT_ID,
+    androidClientId: GOOGLE_WEB_CLIENT_ID,
+  });
 
+  useEffect(() => {
+    if (response?.type === 'success') {
+      const { id_token } = response.params;
+      if (id_token) {
+        verifyGoogleTokenAndLogin(id_token);
+      }
+    }
+  }, [response]);
+
+  const verifyGoogleTokenAndLogin = async (idToken: string) => {
+    setLoading(true);
+    try {
+      const res = await apiRequest('/auth/google', {
+        method: 'POST',
+        body: JSON.stringify({ token: idToken }),
+      });
+
+      setLoading(false);
+      if (res.success && res.token && res.user) {
+        await login(res.token, res.user);
+        Alert.alert('Success', `Welcome, ${res.user.name}!`);
+        onNavigate('Home');
+      } else {
+        Alert.alert('Authentication Failed', res.error || 'Could not sign in with Google.');
+      }
+    } catch (error: any) {
+      setLoading(false);
+      Alert.alert('Authentication Error', error.message || 'An error occurred during authentication.');
+    }
+  };
 
   const handleLogin = async () => {
     if (activeTab === 'admin') {
@@ -55,26 +97,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigate }) => {
   };
 
   const handleGoogleLogin = async () => {
-    setLoading(true);
-    try {
-      // Send token to Next.js backend API
-      const idToken = "demo-google-token";
-      const res = await apiRequest('/auth/google', {
-        method: 'POST',
-        body: JSON.stringify({ token: idToken }),
-      });
-
-      setLoading(false);
-      if (res.success && res.token && res.user) {
-        await login(res.token, res.user);
-        Alert.alert('Success', `Welcome back, ${res.user.name}!`);
-        onNavigate('Home');
-      } else {
-        Alert.alert('Authentication Failed', res.error || 'Could not sign in.');
-      }
-    } catch (error: any) {
-      setLoading(false);
-      Alert.alert('Authentication Error', error.message || 'An error occurred during authentication.');
+    if (request) {
+      promptAsync();
+    } else {
+      verifyGoogleTokenAndLogin("demo-google-token");
     }
   };
 

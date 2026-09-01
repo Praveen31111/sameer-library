@@ -16,7 +16,7 @@ export async function POST(request: Request) {
 
         console.log("Google Auth API: Verifying token...");
         // Verify Firebase Token
-        let decodedToken;
+        let decodedToken: { email?: string; name?: string; picture?: string } | null = null;
         if (token === "demo-google-token" || token === "expo-go-test-token") {
             console.log("Google Auth API: Demo Mode - Bypassing verification for student demo");
             decodedToken = {
@@ -26,11 +26,32 @@ export async function POST(request: Request) {
             };
         } else {
             try {
-                decodedToken = await adminAuth.verifyIdToken(token);
-                console.log("Google Auth API: Token verified for email:", decodedToken.email);
+                const fbDecoded = await adminAuth.verifyIdToken(token);
+                decodedToken = {
+                    email: fbDecoded.email,
+                    name: fbDecoded.name,
+                    picture: fbDecoded.picture,
+                };
+                console.log("Google Auth API: Firebase Token verified for email:", decodedToken.email);
             } catch (verifyError: any) {
-                console.error("Google Auth API: Token verification failed:", verifyError);
-                return NextResponse.json({ error: "Invalid Token: " + verifyError.message }, { status: 401 });
+                console.log("Google Auth API: Firebase verify failed, checking Google OAuth TokenInfo API...");
+                try {
+                    const tokenRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${token}`);
+                    const tokenData = await tokenRes.json();
+                    if (tokenRes.ok && tokenData.email) {
+                        decodedToken = {
+                            email: tokenData.email,
+                            name: tokenData.name || tokenData.given_name || "Google Student",
+                            picture: tokenData.picture || null,
+                        };
+                        console.log("Google Auth API: Google OAuth Token verified for email:", decodedToken.email);
+                    } else {
+                        throw new Error(tokenData.error_description || "Invalid Google ID token");
+                    }
+                } catch (googleError: any) {
+                    console.error("Google Auth API: Token verification failed:", googleError);
+                    return NextResponse.json({ error: "Invalid Token: " + (googleError.message || verifyError.message) }, { status: 401 });
+                }
             }
         }
 
