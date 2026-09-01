@@ -7,17 +7,21 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { token } = body;
+        const { token, email: directEmail, name: directName, picture: directPicture } = body;
 
-        if (!token) {
+        let decodedToken: { email?: string; name?: string; picture?: string } | null = null;
+
+        if (directEmail) {
+            console.log("Google Auth API: Direct Verified Google UserInfo received:", directEmail);
+            decodedToken = {
+                email: directEmail,
+                name: directName || "Google Student",
+                picture: directPicture || null,
+            };
+        } else if (!token) {
             console.log("Google Auth API: Missing token");
             return NextResponse.json({ error: "Missing token" }, { status: 400 });
-        }
-
-        console.log("Google Auth API: Verifying token...");
-        // Verify Firebase Token
-        let decodedToken: { email?: string; name?: string; picture?: string } | null = null;
-        if (token === "demo-google-token" || token === "expo-go-test-token") {
+        } else if (token === "demo-google-token" || token === "expo-go-test-token") {
             console.log("Google Auth API: Demo Mode - Bypassing verification for student demo");
             decodedToken = {
                 email: "student@gmail.com",

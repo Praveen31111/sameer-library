@@ -99,24 +99,48 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigate }) => {
   const handleGoogleLogin = async () => {
     setLoading(true);
     try {
-      const redirectUri = encodeURIComponent('https://sameer-library-72fc9.firebaseapp.com/__/auth/handler');
-      const nonce = Math.random().toString(36).substring(2);
+      const redirectUri = encodeURIComponent('https://auth.expo.io/@praveenchaudhary7518/sameer-library-mobile');
       const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
         `client_id=${GOOGLE_WEB_CLIENT_ID}&` +
         `redirect_uri=${redirectUri}&` +
-        `response_type=id_token&` +
-        `scope=openid%20email%20profile&` +
-        `nonce=${nonce}`;
+        `response_type=token&` +
+        `scope=openid%20email%20profile`;
 
       const result = await WebBrowser.openAuthSessionAsync(
         authUrl,
-        'https://sameer-library-72fc9.firebaseapp.com/__/auth/handler'
+        'https://auth.expo.io/@praveenchaudhary7518/sameer-library-mobile'
       );
 
       if (result.type === 'success' && result.url) {
         const hashParams = new URLSearchParams(result.url.split('#')[1] || result.url.split('?')[1]);
+        const accessToken = hashParams.get('access_token');
         const idToken = hashParams.get('id_token');
-        if (idToken) {
+
+        if (accessToken) {
+          const googleUserRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+          const googleUser = await googleUserRes.json();
+
+          if (googleUser.email) {
+            const res = await apiRequest('/auth/google', {
+              method: 'POST',
+              body: JSON.stringify({
+                email: googleUser.email,
+                name: googleUser.name || googleUser.given_name || 'Google Student',
+                picture: googleUser.picture || null,
+              }),
+            });
+
+            setLoading(false);
+            if (res.success && res.token && res.user) {
+              await login(res.token, res.user);
+              Alert.alert('Success', `Welcome, ${res.user.name}!`);
+              onNavigate('Home');
+              return;
+            }
+          }
+        } else if (idToken) {
           await verifyGoogleTokenAndLogin(idToken);
           return;
         }
