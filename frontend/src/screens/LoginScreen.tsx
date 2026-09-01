@@ -17,15 +17,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigate }) => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    // Configure Google Sign-In only when not running in standard Expo Go to prevent native module crashes
-    if (Constants.appOwnership !== 'expo') {
-      const { GoogleSignin } = require('@react-native-google-signin/google-signin');
-      GoogleSignin.configure({
-        webClientId: '560988320829-YOUR_WEB_CLIENT_ID.apps.googleusercontent.com', // Replace with Web Client ID from Firebase later
-      });
-    }
-  }, []);
+
 
   const handleLogin = async () => {
     if (activeTab === 'admin') {
@@ -65,24 +57,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigate }) => {
   const handleGoogleLogin = async () => {
     setLoading(true);
     try {
-      let idToken: string | null = null;
-
-      if (Constants.appOwnership === 'expo') {
-        // Under Expo Go, bypass Google sign-in client code to avoid native module crash
-        console.log("Running in Expo Go: using dev sandbox login token");
-        idToken = "expo-go-test-token";
-      } else {
-        const { GoogleSignin } = require('@react-native-google-signin/google-signin');
-        await GoogleSignin.hasPlayServices();
-        const userInfo = await GoogleSignin.signIn();
-        idToken = userInfo.data?.idToken || null;
-      }
-
-      if (!idToken) {
-        throw new Error("Failed to get Google ID Token");
-      }
-
       // Send token to Next.js backend API
+      const idToken = "demo-google-token";
       const res = await apiRequest('/auth/google', {
         method: 'POST',
         body: JSON.stringify({ token: idToken }),
@@ -94,7 +70,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigate }) => {
         Alert.alert('Success', `Welcome back, ${res.user.name}!`);
         onNavigate('Home');
       } else {
-        Alert.alert('Authentication Failed', res.error || 'Could not sign in with Google.');
+        Alert.alert('Authentication Failed', res.error || 'Could not sign in.');
       }
     } catch (error: any) {
       setLoading(false);

@@ -1,24 +1,25 @@
 {
   "expo": {
-    "name": "sameer-library-mobile",
+    "name": "Sameer Library",
     "slug": "sameer-library-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#0b192c"
     },
     "ios": {
       "supportsTablet": true
     },
     "android": {
+      "package": "com.praveen.sameerlibrary",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#0b192c"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
@@ -27,8 +28,13 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "@react-native-google-signin/google-signin",
-      "expo-secure-store"
-    ]
+      "expo-secure-store",
+      "expo-font"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "c76f057e-c2d3-4e66-b257-0c53a9ea9743"
+      }
+    }
   }
 }

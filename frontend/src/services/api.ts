@@ -8,10 +8,10 @@ const getLocalIp = () => {
   return hostUri.split(':')[0];
 };
 
-const LOCAL_API_URL = `http://${getLocalIp()}:3000/api`;
 const ENV_API_URL = process.env.EXPO_PUBLIC_API_URL;
+const VERCEL_LIVE_URL = 'https://sameer-library-ten.vercel.app/api';
 
-export const API_URL = ENV_API_URL || (__DEV__ ? LOCAL_API_URL : 'http://localhost:3000/api');
+export const API_URL = ENV_API_URL || VERCEL_LIVE_URL;
 
 
 /**
