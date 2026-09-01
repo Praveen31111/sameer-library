@@ -15,6 +15,7 @@ interface LoginScreenProps {
   onNavigate: (screen: 'Home' | 'Login' | 'Register') => void;
 }
 
+const GOOGLE_ANDROID_CLIENT_ID = '560988320829-31goecj69287hpnbbm0vhuhrt6bjbl2v.apps.googleusercontent.com';
 const GOOGLE_WEB_CLIENT_ID = '560988320829-vn69cuihidkuvrt3cqhv62av9s1ja5sm.apps.googleusercontent.com';
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigate }) => {
@@ -25,9 +26,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigate }) => {
   const [loading, setLoading] = useState(false);
 
   const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
-    clientId: GOOGLE_WEB_CLIENT_ID,
+    androidClientId: GOOGLE_ANDROID_CLIENT_ID,
     webClientId: GOOGLE_WEB_CLIENT_ID,
-    androidClientId: GOOGLE_WEB_CLIENT_ID,
+    clientId: GOOGLE_WEB_CLIENT_ID,
   });
 
   useEffect(() => {
@@ -36,6 +37,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigate }) => {
       if (id_token) {
         verifyGoogleTokenAndLogin(id_token);
       }
+    } else if (response?.type === 'error') {
+      setLoading(false);
+      Alert.alert('Google Sign-In Error', response.error?.message || 'Sign-In failed. Please try again.');
+    } else if (response?.type === 'dismiss' || response?.type === 'cancel') {
+      setLoading(false);
     }
   }, [response]);
 
@@ -93,31 +99,17 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigate }) => {
   };
 
   const handleGoogleLogin = async () => {
+    if (!request) {
+      Alert.alert('Error', 'Google Sign-In is not ready yet. Please wait a moment and try again.');
+      return;
+    }
     setLoading(true);
     try {
-      const userEmail = email.trim() ? email.trim().toLowerCase() : 'student@gmail.com';
-      const userName = userEmail.includes('@') ? userEmail.split('@')[0] : 'Sameer Student';
-      
-      const res = await apiRequest('/auth/google', {
-        method: 'POST',
-        body: JSON.stringify({
-          token: 'demo-google-token',
-          email: userEmail,
-          name: userName,
-        }),
-      });
-
-      setLoading(false);
-      if (res.success && res.token && res.user) {
-        await login(res.token, res.user);
-        Alert.alert('Success 🎉', `Welcome, ${res.user.name}!`);
-        onNavigate('Home');
-      } else {
-        Alert.alert('Authentication Failed', res.error || 'Could not sign in with Google.');
-      }
+      await promptAsync();
+      // Response is handled in the useEffect above
     } catch (err: any) {
       setLoading(false);
-      Alert.alert('Authentication Error', err.message || 'Could not complete Google authentication.');
+      Alert.alert('Authentication Error', err.message || 'Could not open Google Sign-In.');
     }
   };
 

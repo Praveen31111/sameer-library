@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "560988320829",
+    "project_id": "sameer-library-72fc9",
+    "storage_bucket": "sameer-library-72fc9.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:560988320829:android:e92fdf37871adab6a56654",
+        "android_client_info": {
+          "package_name": "com.praveen.sameerlibrary"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "560988320829-31goecj69287hpnbbm0vhuhrt6bjbl2v.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.praveen.sameerlibrary",
+            "certificate_hash": "87488eb191dc6b30915b86d69b862181de3a2a2a"
+          }
+        },
+        {
+          "client_id": "560988320829-vn69cuihidkuvrt3cqhv62av9s1ja5sm.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBmIZjoc7BuVZ8tqkMRhnvj1hEkVuVG2as"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "560988320829-vn69cuihidkuvrt3cqhv62av9s1ja5sm.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
