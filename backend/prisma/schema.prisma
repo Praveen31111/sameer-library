@@ -1,0 +1,181 @@
+// This is your Prisma schema file
+// Learn more: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================
+// MODELS
+// ============================================
+
+model User {
+  id            String    @id @default(cuid())
+  role          String    @default("STUDENT") // STUDENT, ADMIN, OWNER
+  name          String
+  email         String    @unique
+  phone         String?   @unique
+  passwordHash  String?
+  emailVerified Boolean   @default(false)
+  phoneVerified Boolean   @default(false)
+  status        String    @default("PENDING_VERIFICATION") // ACTIVE, BLOCKED, PENDING_VERIFICATION
+  profilePhoto  String?
+  college       String?
+  course        String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  ownedBranches    Branch[]              @relation("BranchOwner")
+  bookings         Booking[]
+  payments         Payment[]
+  attendances      Attendance[]
+  fingerprints     FingerprintTemplate[]
+  approvedBookings Booking[]             @relation("ApprovedBy")
+}
+
+model Branch {
+  id        String   @id @default(cuid())
+  name      String
+  code      String   @unique // SL01, SL02
+  address   String
+  city      String
+  photo     String?  @db.Text // Branch photo as base64
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  ownerId     String
+  owner       User         @relation("BranchOwner", fields: [ownerId], references: [id])
+  rooms       Room[]
+  bookings    Booking[]
+  attendances Attendance[]
+  devices     Device[]
+}
+
+model Room {
+  id        String   @id @default(cuid())
+  name      String // "Room A", "Silent Zone"
+  capacity  Int
+  photo     String?  @db.Text // Room photo as URL or base64
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations  
+  branchId    String
+  branch      Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  seats       Seat[]
+  bookings    Booking[]
+  attendances Attendance[]
+}
+
+model Seat {
+  id         String   @id @default(cuid())
+  seatNumber String // A1, A2, B5
+  status     String   @default("AVAILABLE") // AVAILABLE, BLOCKED, MAINTENANCE
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relations
+  roomId   String
+  room     Room      @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  bookings Booking[]
+
+  @@unique([roomId, seatNumber])
+}
+
+model Booking {
+  id        String   @id @default(cuid())
+  startDate DateTime
+  endDate   DateTime
+  planType  String // HOURLY, HALF_DAY, DAILY, WEEKLY, MONTHLY
+  status    String   @default("PENDING") // PENDING, APPROVED, REJECTED, CANCELLED, COMPLETED
+  amount    Float
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  studentId    String
+  student      User     @relation(fields: [studentId], references: [id])
+  branchId     String
+  branch       Branch   @relation(fields: [branchId], references: [id])
+  roomId       String
+  room         Room     @relation(fields: [roomId], references: [id])
+  seatId       String
+  seat         Seat     @relation(fields: [seatId], references: [id])
+  approvedById String?
+  approvedBy   User?    @relation("ApprovedBy", fields: [approvedById], references: [id])
+  payment      Payment?
+}
+
+model Payment {
+  id                String   @id @default(cuid())
+  amount            Float
+  currency          String   @default("INR")
+  status            String   @default("PENDING") // PENDING, SUCCESS, FAILED, REFUNDED
+  provider          String   @default("razorpay")
+  providerPaymentId String?
+  providerOrderId   String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  bookingId String  @unique
+  booking   Booking @relation(fields: [bookingId], references: [id])
+  studentId String
+  student   User    @relation(fields: [studentId], references: [id])
+}
+
+model Attendance {
+  id         String    @id @default(cuid())
+  checkInAt  DateTime
+  checkOutAt DateTime?
+  source     String // FINGERPRINT_DEVICE, MANUAL_ADMIN, QR_CODE
+  createdAt  DateTime  @default(now())
+
+  // Relations
+  studentId String
+  student   User    @relation(fields: [studentId], references: [id])
+  branchId  String
+  branch    Branch  @relation(fields: [branchId], references: [id])
+  roomId    String?
+  room      Room?   @relation(fields: [roomId], references: [id])
+}
+
+model Device {
+  id               String    @id @default(cuid())
+  name             String
+  deviceIdentifier String    @unique
+  apiKey           String    @unique
+  lastSyncAt       DateTime?
+  isActive         Boolean   @default(true)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  // Relations
+  branchId     String
+  branch       Branch                @relation(fields: [branchId], references: [id])
+  fingerprints FingerprintTemplate[]
+}
+
+model FingerprintTemplate {
+  id                 String   @id @default(cuid())
+  templateExternalId String // ID used by device
+  createdAt          DateTime @default(now())
+
+  // Relations
+  studentId String
+  student   User    @relation(fields: [studentId], references: [id])
+  deviceId  String?
+  device    Device? @relation(fields: [deviceId], references: [id])
+
+  @@unique([studentId, deviceId])
+}

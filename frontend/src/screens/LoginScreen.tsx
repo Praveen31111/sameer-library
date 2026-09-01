@@ -1,0 +1,383 @@
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, Text, View, TextInput, SafeAreaView, KeyboardAvoidingView, Platform, Alert, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { Button } from '../components/Button';
+import { useAuth } from '../context/AuthContext';
+import Constants from 'expo-constants';
+import { apiRequest } from '../services/api';
+
+interface LoginScreenProps {
+  onNavigate: (screen: 'Home' | 'Login' | 'Register') => void;
+}
+
+export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigate }) => {
+  const { login } = useAuth();
+  const [activeTab, setActiveTab] = useState<'student' | 'admin'>('student');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    // Configure Google Sign-In only when not running in standard Expo Go to prevent native module crashes
+    if (Constants.appOwnership !== 'expo') {
+      const { GoogleSignin } = require('@react-native-google-signin/google-signin');
+      GoogleSignin.configure({
+        webClientId: '560988320829-YOUR_WEB_CLIENT_ID.apps.googleusercontent.com', // Replace with Web Client ID from Firebase later
+      });
+    }
+  }, []);
+
+  const handleLogin = async () => {
+    if (activeTab === 'admin') {
+      if (!email || !password) {
+        Alert.alert('Error', 'Please enter email and password');
+        return;
+      }
+      setLoading(true);
+      
+      try {
+        const res = await apiRequest('/auth/login', {
+          method: 'POST',
+          body: JSON.stringify({ email, password }),
+        });
+
+        setLoading(false);
+        if (res.success && res.token && res.user) {
+          if (res.user.role === 'ADMIN' || res.user.role === 'OWNER') {
+            await login(res.token, res.user);
+            Alert.alert('Success', 'Admin logged in successfully!');
+            onNavigate('Home');
+          } else {
+            Alert.alert('Unauthorized', 'This account does not have Admin access.');
+          }
+        } else {
+          Alert.alert('Login Failed', res.error || 'Invalid admin credentials.');
+        }
+      } catch (error: any) {
+        setLoading(false);
+        Alert.alert('Connection Error', error.message || 'Could not connect to the backend server.');
+      }
+    } else {
+      Alert.alert('Notice', 'Students should use Google login.');
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    setLoading(true);
+    try {
+      let idToken: string | null = null;
+
+      if (Constants.appOwnership === 'expo') {
+        // Under Expo Go, bypass Google sign-in client code to avoid native module crash
+        console.log("Running in Expo Go: using dev sandbox login token");
+        idToken = "expo-go-test-token";
+      } else {
+        const { GoogleSignin } = require('@react-native-google-signin/google-signin');
+        await GoogleSignin.hasPlayServices();
+        const userInfo = await GoogleSignin.signIn();
+        idToken = userInfo.data?.idToken || null;
+      }
+
+      if (!idToken) {
+        throw new Error("Failed to get Google ID Token");
+      }
+
+      // Send token to Next.js backend API
+      const res = await apiRequest('/auth/google', {
+        method: 'POST',
+        body: JSON.stringify({ token: idToken }),
+      });
+
+      setLoading(false);
+      if (res.success && res.token && res.user) {
+        await login(res.token, res.user);
+        Alert.alert('Success', `Welcome back, ${res.user.name}!`);
+        onNavigate('Home');
+      } else {
+        Alert.alert('Authentication Failed', res.error || 'Could not sign in with Google.');
+      }
+    } catch (error: any) {
+      setLoading(false);
+      Alert.alert('Authentication Error', error.message || 'An error occurred during authentication.');
+    }
+  };
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardView}
+      >
+        {/* Back to Home Header */}
+        <TouchableOpacity style={styles.backButton} onPress={() => onNavigate('Home')}>
+          <Ionicons name="arrow-back-outline" size={24} color="#ffffff" />
+          <Text style={styles.backButtonText}>Back to Home</Text>
+        </TouchableOpacity>
+
+        {/* Logo */}
+        <View style={styles.logoContainer}>
+          <View style={styles.logoIcon}>
+            <Ionicons name="book" size={24} color="white" />
+          </View>
+          <Text style={styles.logoText}>
+            Sameer <Text style={styles.logoHighlight}>Library</Text>
+          </Text>
+        </View>
+
+        {/* Card */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Welcome back</Text>
+          <Text style={styles.cardSubtitle}>Sign in to continue</Text>
+
+          {/* Sliding Tabs */}
+          <View style={styles.tabsContainer}>
+            <TouchableOpacity
+              style={[styles.tab, activeTab === 'student' && styles.activeTab]}
+              onPress={() => setActiveTab('student')}
+            >
+              <Text style={[styles.tabText, activeTab === 'student' && styles.activeTabText]}>Student</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.tab, activeTab === 'admin' && styles.activeTab]}
+              onPress={() => setActiveTab('admin')}
+            >
+              <Text style={[styles.tabText, activeTab === 'admin' && styles.activeTabText]}>Admin</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Form Content */}
+          {activeTab === 'student' ? (
+            <View style={styles.studentContainer}>
+              <TouchableOpacity style={styles.googleButton} onPress={handleGoogleLogin}>
+                <Ionicons name="logo-google" size={18} color="#000000" style={styles.googleIcon} />
+                <Text style={styles.googleButtonText}>Continue with Google</Text>
+              </TouchableOpacity>
+              <Text style={styles.studentNote}>
+                Students are requested to log in using Google Authentication for instant access.
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.form}>
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Email Address</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="admin@sameerlibrary.com"
+                  placeholderTextColor="#525252"
+                  value={email}
+                  onChangeText={setEmail}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Password</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="••••••••"
+                  placeholderTextColor="#525252"
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry
+                  autoCapitalize="none"
+                />
+              </View>
+
+              <Button
+                title="Sign In as Admin"
+                onPress={handleLogin}
+                loading={loading}
+                style={styles.loginButton}
+              />
+            </View>
+          )}
+        </View>
+
+        {/* Footer */}
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>
+            Don't have an account?{' '}
+            <Text style={styles.signupLink} onPress={() => onNavigate('Register')}>
+              Sign Up
+            </Text>
+          </Text>
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#0a0a0a',
+  },
+  keyboardView: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 60 : 30,
+    left: 20,
+    zIndex: 10,
+    paddingVertical: 8,
+  },
+  backButtonText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  logoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 30,
+    marginTop: 60,
+  },
+  logoIcon: {
+    width: 40,
+    height: 40,
+    backgroundColor: '#0d9488',
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  logoText: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#ffffff',
+    letterSpacing: -0.5,
+  },
+  logoHighlight: {
+    color: '#0d9488',
+  },
+  card: {
+    backgroundColor: '#171717',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#262626',
+    padding: 24,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  cardTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#ffffff',
+    textAlign: 'center',
+  },
+  cardSubtitle: {
+    fontSize: 14,
+    color: '#a3a3a3',
+    textAlign: 'center',
+    marginTop: 4,
+    marginBottom: 24,
+  },
+  tabsContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#262626',
+    borderRadius: 10,
+    padding: 4,
+    marginBottom: 24,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  activeTab: {
+    backgroundColor: '#171717',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  tabText: {
+    color: '#a3a3a3',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  activeTabText: {
+    color: '#ffffff',
+  },
+  studentContainer: {
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  googleButton: {
+    flexDirection: 'row',
+    backgroundColor: '#ffffff',
+    width: '100%',
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    marginBottom: 20,
+  },
+  googleIcon: {
+    marginTop: 2,
+  },
+  googleButtonText: {
+    color: '#000000',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  studentNote: {
+    color: '#525252',
+    fontSize: 12,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  form: {
+    width: '100%',
+  },
+  inputGroup: {
+    marginBottom: 16,
+  },
+  label: {
+    fontSize: 14,
+    color: '#a3a3a3',
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  input: {
+    backgroundColor: '#262626',
+    color: '#ffffff',
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    fontSize: 15,
+    borderWidth: 1,
+    borderColor: '#404040',
+  },
+  loginButton: {
+    backgroundColor: '#0d9488',
+    marginTop: 10,
+  },
+  footer: {
+    alignItems: 'center',
+    marginTop: 24,
+  },
+  footerText: {
+    color: '#525252',
+    fontSize: 14,
+  },
+  signupLink: {
+    color: '#0d9488',
+    fontWeight: '600',
+  },
+});
+export default LoginScreen;
