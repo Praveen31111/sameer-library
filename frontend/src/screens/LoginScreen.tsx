@@ -226,7 +226,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigate }) => {
               <View style={styles.inputWrapper}>
                 <TextInput
                   style={styles.input}
-                  placeholder={activeTab === 'student' ? 'student@sameerlibrary.com' : 'admin@sameerlibrary.com'}
+                  placeholder="Enter your email address"
                   placeholderTextColor={COLORS.outline}
                   value={email}
                   onChangeText={setEmail}
@@ -270,33 +270,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigate }) => {
                 {loading ? 'Signing In...' : activeTab === 'student' ? 'Sign In as Student' : 'Sign In as Admin'}
               </Text>
             </TouchableOpacity>
-
-            {/* Quick Demo Credentials Assistant */}
-            <View style={styles.demoBox}>
-              <Text style={styles.demoTitle}>Quick Fill Demo Accounts:</Text>
-              <View style={styles.demoChipsRow}>
-                <TouchableOpacity 
-                  style={[styles.demoChip, { marginRight: 8 }]} 
-                  onPress={() => {
-                    setActiveTab('student');
-                    setEmail('student@sameerlibrary.com');
-                    setPassword('student123');
-                  }}
-                >
-                  <Text style={styles.demoChipText}>🎓 Student</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={styles.demoChip} 
-                  onPress={() => {
-                    setActiveTab('admin');
-                    setEmail('admin@sameerlibrary.com');
-                    setPassword('admin123');
-                  }}
-                >
-                  <Text style={styles.demoChipText}>⚡ Admin</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
 
             {/* Divider */}
             {activeTab === 'student' && (

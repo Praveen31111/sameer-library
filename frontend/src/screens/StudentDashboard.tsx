@@ -22,10 +22,10 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
   const [profilePhoto, setProfilePhoto] = useState<string>(
     user?.profilePhoto || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80'
   );
-  const [editName, setEditName] = useState<string>(user?.name || 'Demo Student');
-  const [editPhone, setEditPhone] = useState<string>(user?.phone || '+919999900002');
-  const [editEmail, setEditEmail] = useState<string>(user?.email || 'student@sameerlibrary.com');
-  const [editAddress, setEditAddress] = useState<string>(user?.college || 'Maharajganj Sonauli Road, UP');
+  const [editName, setEditName] = useState<string>(user?.name || '');
+  const [editPhone, setEditPhone] = useState<string>(user?.phone || '');
+  const [editEmail, setEditEmail] = useState<string>(user?.email || '');
+  const [editAddress, setEditAddress] = useState<string>(user?.college || '');
   const [isEditingProfile, setIsEditingProfile] = useState<boolean>(false);
   const [savingProfile, setSavingProfile] = useState<boolean>(false);
 
@@ -1135,7 +1135,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
                   style={styles.editInput}
                   value={editEmail}
                   onChangeText={setEditEmail}
-                  placeholder="student@sameerlibrary.com"
+                  placeholder="student@gmail.com"
                   placeholderTextColor={COLORS.outline}
                   keyboardType="email-address"
                   autoCapitalize="none"
@@ -1214,7 +1214,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.detailFieldLabel}>Email Address</Text>
-                  <Text style={styles.detailFieldValue}>{editEmail || user?.email || 'student@sameerlibrary.com'}</Text>
+                  <Text style={styles.detailFieldValue}>{editEmail || user?.email || 'Not provided'}</Text>
                 </View>
               </View>
 
