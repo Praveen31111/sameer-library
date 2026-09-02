@@ -19,6 +19,7 @@ import {
   Image,
   Animated,
   Linking,
+  BackHandler,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -68,6 +69,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
   const [revenueModalVisible, setRevenueModalVisible] = useState(false);
   const [revenueFilter, setRevenueFilter] = useState<'ALL' | 'ONLINE' | 'OFFLINE'>('ALL');
   const [revenueSearch, setRevenueSearch] = useState('');
+
+  // 3. Pricing & Offers Management State
+  const [pricingModalVisible, setPricingModalVisible] = useState(false);
+  const [monthlyBasePrice, setMonthlyBasePrice] = useState('1000');
+  const [discountPercent, setDiscountPercent] = useState('20');
+  const [discountActive, setDiscountActive] = useState(false);
+  const [offerTitle, setOfferTitle] = useState('Limited Time Offer: Book your monthly seat at a discount!');
+  const [weeklyPrice, setWeeklyPrice] = useState('300');
+  const [dailyPrice, setDailyPrice] = useState('50');
+  const [savingPricing, setSavingPricing] = useState(false);
 
   // Live breakdown stats (library-wise and room-wise)
   const [libraryStats, setLibraryStats] = useState<any[]>([]);
@@ -136,6 +147,68 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
   const [logsSubTab, setLogsSubTab] = useState<'Attendance' | 'Payments'>('Attendance');
   const [attendanceLogs, setAttendanceLogs] = useState<any[]>([]);
   const [paymentLogs, setPaymentLogs] = useState<any[]>([]);
+
+  // Hardware Back Button Navigation Handler (Step-by-step back)
+  useEffect(() => {
+    const handleHardwareBack = () => {
+      if (pricingModalVisible) {
+        setPricingModalVisible(false);
+        return true;
+      }
+      if (revenueModalVisible) {
+        setRevenueModalVisible(false);
+        return true;
+      }
+      if (approvalModalVisible) {
+        setApprovalModalVisible(false);
+        return true;
+      }
+      if (occupantModalVisible) {
+        setOccupantModalVisible(false);
+        return true;
+      }
+      if (addSeatModal) {
+        setAddSeatModal(false);
+        return true;
+      }
+      if (roomModalVisible) {
+        setRoomModalVisible(false);
+        return true;
+      }
+      if (branchModalVisible) {
+        setBranchModalVisible(false);
+        return true;
+      }
+      if (activeTab === 'Facilities') {
+        if (facilityLevel === 'seats') {
+          setFacilityLevel('rooms');
+          return true;
+        }
+        if (facilityLevel === 'rooms') {
+          setFacilityLevel('branches');
+          return true;
+        }
+      }
+      if (activeTab !== 'Overview') {
+        setActiveTab('Overview');
+        return true;
+      }
+      return false;
+    };
+
+    const sub = BackHandler.addEventListener('hardwareBackPress', handleHardwareBack);
+    return () => sub.remove();
+  }, [
+    pricingModalVisible,
+    revenueModalVisible,
+    approvalModalVisible,
+    occupantModalVisible,
+    addSeatModal,
+    roomModalVisible,
+    branchModalVisible,
+    activeTab,
+    facilityLevel,
+  ]);
 
   // API Call: Fetch Stats
   const fetchStats = async () => {
@@ -231,10 +304,57 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
     }
   };
 
+  // API Call: Fetch Pricing & Offers
+  const fetchPricing = async () => {
+    try {
+      const res = await apiRequest('/pricing');
+      if (res?.pricing) {
+        setMonthlyBasePrice(String(res.pricing.monthlyBasePrice ?? 1000));
+        setDiscountPercent(String(res.pricing.discountPercent ?? 0));
+        setDiscountActive(Boolean(res.pricing.discountActive));
+        setOfferTitle(res.pricing.offerTitle || '');
+        setWeeklyPrice(String(res.pricing.weeklyPrice ?? 300));
+        setDailyPrice(String(res.pricing.dailyPrice ?? 50));
+      }
+    } catch (err: any) {
+      console.error('Failed to fetch pricing:', err);
+    }
+  };
+
+  // Save Pricing & Offers
+  const handleSavePricing = async () => {
+    setSavingPricing(true);
+    try {
+      const res = await apiRequest('/pricing', {
+        method: 'POST',
+        body: JSON.stringify({
+          monthlyBasePrice: Number(monthlyBasePrice) || 1000,
+          discountPercent: Number(discountPercent) || 0,
+          discountActive,
+          offerTitle,
+          weeklyPrice: Number(weeklyPrice) || 300,
+          dailyPrice: Number(dailyPrice) || 50,
+        }),
+      });
+      if (res.success) {
+        Alert.alert('Pricing Updated ✅', 'New seat prices & discount offers have been successfully saved and applied for all students!');
+        setPricingModalVisible(false);
+      } else {
+        Alert.alert('Error', res.error || 'Failed to update pricing');
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to save pricing');
+    } finally {
+      setSavingPricing(false);
+    }
+  };
+
   // Main Active Tab Loader
   const loadActiveTabData = useCallback(async () => {
     setLoading(true);
-    if (activeTab === 'Overview') await fetchStats();
+    if (activeTab === 'Overview') {
+      await Promise.all([fetchStats(), fetchPricing()]);
+    }
     else if (activeTab === 'Bookings') await fetchBookings(bookingFilter);
     else if (activeTab === 'Facilities') {
       if (facilityLevel === 'branches') await fetchBranches();
@@ -871,6 +991,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                 </TouchableOpacity>
               </Animated.View>
             )}
+
+            {/* Pricing & Discount Offers Management Banner */}
+            <TouchableOpacity
+              style={styles.pricingQuickBanner}
+              onPress={() => setPricingModalVisible(true)}
+              activeOpacity={0.85}
+            >
+              <View style={styles.pricingQuickLeft}>
+                <View style={styles.pricingIconBadge}>
+                  <Ionicons name="pricetag" size={18} color="#ffffff" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={styles.pricingQuickTitle}>Seat Pricing & Discounts</Text>
+                    {discountActive && (
+                      <View style={styles.discountActiveBadge}>
+                        <Text style={styles.discountActiveBadgeText}>{discountPercent}% OFF</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={styles.pricingQuickSub}>
+                    Monthly: ₹{discountActive ? Math.round(Number(monthlyBasePrice) * (1 - Number(discountPercent)/100)) : monthlyBasePrice}
+                    {discountActive ? ` (Was ₹${monthlyBasePrice})` : ''} • Weekly: ₹{weeklyPrice} • Daily: ₹{dailyPrice}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.pricingEditBtn}>
+                <Text style={styles.pricingEditBtnText}>Change →</Text>
+              </View>
+            </TouchableOpacity>
 
             {/* Bento Grid - 4 KPI Cards */}
             <View style={styles.kpiGrid}>
@@ -1708,10 +1858,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
       {/* Header Bar */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Image
-            source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80' }}
-            style={styles.adminAvatarThumb}
-          />
+          {((activeTab as string) !== 'Overview' || facilityLevel !== 'branches') ? (
+            <TouchableOpacity
+              style={styles.headerBackBtn}
+              onPress={() => {
+                if (activeTab === 'Facilities' && facilityLevel === 'seats') {
+                  setFacilityLevel('rooms');
+                } else if (activeTab === 'Facilities' && facilityLevel === 'rooms') {
+                  setFacilityLevel('branches');
+                } else {
+                  setActiveTab('Overview');
+                }
+              }}
+              activeOpacity={0.7}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            >
+              <Ionicons name="arrow-back" size={22} color={COLORS.primary} />
+              <Text style={styles.headerBackBtnText}>Back</Text>
+            </TouchableOpacity>
+          ) : (
+            <Image
+              source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80' }}
+              style={styles.adminAvatarThumb}
+            />
+          )}
           <View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <Text style={styles.headerTitle}>Sameer Library</Text>
@@ -1719,10 +1889,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                 <Text style={styles.versionBadgeText}>ADMIN</Text>
               </View>
             </View>
-            <Text style={styles.headerSubtitle}>Management System</Text>
+            <Text style={styles.headerSubtitle}>
+              {activeTab !== 'Overview' ? activeTab : 'Management System'}
+            </Text>
           </View>
         </View>
         <View style={styles.headerRight}>
+          <TouchableOpacity
+            style={styles.pricingHeaderBtn}
+            onPress={() => setPricingModalVisible(true)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="pricetag" size={13} color="#ffffff" />
+            <Text style={styles.pricingHeaderBtnText}>Prices</Text>
+          </TouchableOpacity>
           <TouchableOpacity 
             style={styles.notifBtn} 
             onPress={() => Alert.alert('Alerts', 'No pending system notifications.')}
@@ -2342,6 +2522,158 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
               onPress={() => setRevenueModalVisible(false)}
             >
               <Text style={styles.modalCloseBtnText}>Close Ledger</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* MODAL 7: Set Pricing & Discount Offers */}
+      <Modal
+        visible={pricingModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setPricingModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Pressable style={styles.modalBackdrop} onPress={() => setPricingModalVisible(false)} />
+          <View style={[styles.modalContent, { maxHeight: '88%', paddingBottom: 16 }]}>
+            <View style={styles.modalHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.modalTitle}>🏷️ Seat Pricing & Offers</Text>
+                <Text style={styles.modalSubTitle}>
+                  Change monthly prices & launch student discount offers
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setPricingModalVisible(false)}>
+                <Ionicons name="close" size={24} color="#ffffff" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ maxHeight: 420 }} showsVerticalScrollIndicator={false}>
+              {/* Live Preview Box */}
+              <View style={styles.pricingLivePreviewBox}>
+                <Text style={styles.pricingPreviewLabel}>STUDENT APP PREVIEW</Text>
+                <View style={styles.pricingPreviewRow}>
+                  <View>
+                    <Text style={styles.pricingPreviewPlan}>Monthly Seat Membership</Text>
+                    {discountActive && Number(discountPercent) > 0 ? (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                        <Text style={styles.pricingOriginalStrikethrough}>₹{monthlyBasePrice}</Text>
+                        <Text style={styles.pricingDiscountedBig}>
+                          ₹{Math.round(Number(monthlyBasePrice) * (1 - Number(discountPercent) / 100))}
+                        </Text>
+                        <View style={styles.discountBadgeSmall}>
+                          <Text style={styles.discountBadgeSmallText}>{discountPercent}% OFF</Text>
+                        </View>
+                      </View>
+                    ) : (
+                      <Text style={styles.pricingDiscountedBig}>₹{monthlyBasePrice} / month</Text>
+                    )}
+                  </View>
+                </View>
+                {discountActive ? (
+                  <View style={styles.offerBannerPreviewBox}>
+                    <Text style={styles.offerBannerPreviewText}>
+                      🔥 {offerTitle || 'Special Discount Active!'}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+
+              {/* Monthly Base Price */}
+              <Text style={styles.modalInputLabel}>REGULAR MONTHLY SEAT PRICE (₹)</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="e.g. 1000, 1200, 800"
+                placeholderTextColor="#8e8e93"
+                keyboardType="numeric"
+                value={monthlyBasePrice}
+                onChangeText={setMonthlyBasePrice}
+              />
+
+              {/* Discount Offer Toggle */}
+              <View style={styles.discountToggleRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.discountToggleTitle}>Run Discount Offer 🔥</Text>
+                  <Text style={styles.discountToggleSub}>
+                    Show discounted price & promo banner to attract more students
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={[
+                    styles.discountToggleBtn,
+                    discountActive ? styles.discountToggleBtnOn : styles.discountToggleBtnOff,
+                  ]}
+                  onPress={() => setDiscountActive(!discountActive)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.discountToggleBtnText}>
+                    {discountActive ? 'ACTIVE (ON)' : 'OFF'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Discount Percentage */}
+              {discountActive ? (
+                <>
+                  <Text style={styles.modalInputLabel}>DISCOUNT PERCENTAGE (%)</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="e.g. 10, 20, 30"
+                    placeholderTextColor="#8e8e93"
+                    keyboardType="numeric"
+                    value={discountPercent}
+                    onChangeText={setDiscountPercent}
+                  />
+
+                  <Text style={styles.modalInputLabel}>OFFER BANNER / PROMO HEADLINE</Text>
+                  <TextInput
+                    style={[styles.modalInput, { height: 52 }]}
+                    placeholder="e.g. Limited Time Admission Offer: Flat 20% OFF!"
+                    placeholderTextColor="#8e8e93"
+                    value={offerTitle}
+                    onChangeText={setOfferTitle}
+                    multiline
+                  />
+                </>
+              ) : null}
+
+              {/* Other Plans: Weekly & Daily */}
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.modalInputLabel}>WEEKLY PRICE (₹)</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="300"
+                    placeholderTextColor="#8e8e93"
+                    keyboardType="numeric"
+                    value={weeklyPrice}
+                    onChangeText={setWeeklyPrice}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.modalInputLabel}>DAILY PASS (₹)</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="50"
+                    placeholderTextColor="#8e8e93"
+                    keyboardType="numeric"
+                    value={dailyPrice}
+                    onChangeText={setDailyPrice}
+                  />
+                </View>
+              </View>
+            </ScrollView>
+
+            <TouchableOpacity
+              style={styles.modalSubmitBtn}
+              onPress={handleSavePricing}
+              disabled={savingPricing}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.modalSubmitBtnText}>
+                {savingPricing ? 'Saving Changes...' : 'Save & Apply Price Changes'}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -3919,6 +4251,194 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     color: '#86efac',
+  },
+
+  headerBackBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.surfaceContainerLow,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    gap: 4,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  headerBackBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  pricingHeaderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 14,
+    gap: 4,
+  },
+  pricingHeaderBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+
+  // Pricing quick banner
+  pricingQuickBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#1c1c1e',
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#2c2c2e',
+  },
+  pricingQuickLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  pricingIconBadge: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pricingQuickTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  pricingQuickSub: {
+    fontSize: 11,
+    color: '#8e8e93',
+    marginTop: 2,
+  },
+  pricingEditBtn: {
+    backgroundColor: 'rgba(13, 148, 136, 0.15)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+  },
+  pricingEditBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  discountActiveBadge: {
+    backgroundColor: '#ef4444',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  discountActiveBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#ffffff',
+  },
+
+  // Pricing modal styles
+  pricingLivePreviewBox: {
+    backgroundColor: '#252528',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#3a3a3e',
+  },
+  pricingPreviewLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#8e8e93',
+    letterSpacing: 0.5,
+  },
+  pricingPreviewRow: {
+    marginTop: 6,
+  },
+  pricingPreviewPlan: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  pricingOriginalStrikethrough: {
+    fontSize: 14,
+    color: '#ef4444',
+    textDecorationLine: 'line-through',
+    fontWeight: '600',
+  },
+  pricingDiscountedBig: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#22c55e',
+  },
+  discountBadgeSmall: {
+    backgroundColor: '#ef4444',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  discountBadgeSmallText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#ffffff',
+  },
+  offerBannerPreviewBox: {
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    borderRadius: 8,
+    padding: 8,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+  },
+  offerBannerPreviewText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#f87171',
+  },
+  discountToggleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#1c1c1e',
+    borderRadius: 10,
+    padding: 12,
+    marginVertical: 10,
+    borderWidth: 1,
+    borderColor: '#2c2c2e',
+  },
+  discountToggleTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  discountToggleSub: {
+    fontSize: 10,
+    color: '#8e8e93',
+    marginTop: 2,
+  },
+  discountToggleBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+  },
+  discountToggleBtnOn: {
+    backgroundColor: '#ef4444',
+  },
+  discountToggleBtnOff: {
+    backgroundColor: '#3a3a3c',
+  },
+  discountToggleBtnText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#ffffff',
   },
 });
 

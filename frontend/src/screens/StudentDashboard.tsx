@@ -48,6 +48,59 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
   const [loadingSeats, setLoadingSeats] = useState(false);
   const [zoneFilter, setZoneFilter] = useState<'ALL' | 'SILENT' | 'GROUP' | 'MONITOR'>('ALL');
 
+  // Dynamic Pricing & Discount Offer State
+  const [pricingConfig, setPricingConfig] = useState<any>({
+    monthlyBasePrice: 1000,
+    monthlyPrice: 1000,
+    discountPercent: 0,
+    discountActive: false,
+    offerTitle: '',
+    weeklyPrice: 300,
+    dailyPrice: 50,
+  });
+
+  // Fetch Pricing & Discounts from server
+  const fetchPricing = async () => {
+    try {
+      const res = await apiRequest('/pricing');
+      if (res?.pricing) {
+        setPricingConfig(res.pricing);
+      }
+    } catch (e) {
+      console.log('Error fetching pricing config:', e);
+    }
+  };
+
+  // Step-by-step Back Navigation Handler (Hardware and UI)
+  const handleStudentBack = () => {
+    if (isEditingProfile) {
+      setIsEditingProfile(false);
+      return true;
+    }
+    if (activeTab === 'Book') {
+      if (selectedSeatId) {
+        setSelectedSeatId(null);
+        return true;
+      }
+      if (selectedRoomId) {
+        setSelectedRoomId(null);
+        return true;
+      }
+      setActiveTab('Home');
+      return true;
+    }
+    if (activeTab !== 'Home') {
+      setActiveTab('Home');
+      return true;
+    }
+    return false;
+  };
+
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', handleStudentBack);
+    return () => sub.remove();
+  }, [isEditingProfile, activeTab, selectedSeatId, selectedRoomId]);
+
   // Sync user updates
   useEffect(() => {
     if (user) {
@@ -57,6 +110,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
       if (user.email) setEditEmail(user.email);
       if (user.college) setEditAddress(user.college);
     }
+    fetchPricing();
   }, [user]);
 
   // Animation refs for dynamic animations
@@ -341,7 +395,13 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
       return;
     }
 
-    const price = bookingPlan === 'DAILY' ? 50 : bookingPlan === 'WEEKLY' ? 300 : 1000;
+    const price = bookingPlan === 'DAILY'
+      ? (Number(pricingConfig?.dailyPrice) || 50)
+      : bookingPlan === 'WEEKLY'
+      ? (Number(pricingConfig?.weeklyPrice) || 300)
+      : (pricingConfig?.discountActive && Number(pricingConfig?.discountPercent) > 0
+          ? Number(pricingConfig?.monthlyPrice)
+          : (Number(pricingConfig?.monthlyBasePrice) || 1000));
     const start = new Date(startDate);
     const end = new Date(start);
     if (bookingPlan === 'DAILY') {
@@ -565,6 +625,29 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
           <Text style={styles.sectionSubtitle}>Choose the environment that best fits your focus needs.</Text>
         </View>
 
+        {/* Active Promotional Offer Banner */}
+        {pricingConfig?.discountActive ? (
+          <View style={styles.specialOfferPromoCard}>
+            <View style={styles.specialOfferFireBox}>
+              <Ionicons name="flame" size={20} color="#ffffff" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={styles.specialOfferBadgeText}>SPECIAL STUDENT OFFER</Text>
+                {Number(pricingConfig.discountPercent) > 0 ? (
+                  <View style={styles.discountPillSmall}>
+                    <Text style={styles.discountPillSmallText}>{pricingConfig.discountPercent}% OFF</Text>
+                  </View>
+                ) : null}
+              </View>
+              <Text style={styles.specialOfferHeadline}>{pricingConfig.offerTitle || 'Discounted Monthly Seat Pass Available!'}</Text>
+              <Text style={styles.specialOfferPricingSub}>
+                Monthly Seat Pass at just <Text style={styles.offerGreenBold}>₹{pricingConfig.monthlyPrice}</Text> (Regular ₹{pricingConfig.monthlyBasePrice})
+              </Text>
+            </View>
+          </View>
+        ) : null}
+
         {/* Branch Selector Horizontal Pills */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalPills}>
           {branches.map(branch => {
@@ -648,7 +731,25 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
 
         {/* Interactive Seat Selection Grid */}
         <View style={styles.seatSelectionSection}>
-          <Text style={styles.seatSelectionTitle}>Select Seat</Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <View>
+              <Text style={styles.seatSelectionTitle}>Select Seat</Text>
+              <Text style={styles.roomSubTitleText}>
+                Room: {selectedBranch?.rooms?.find((r: any) => r.id === selectedRoomId)?.name || 'Selected Room'}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.changeRoomBtn}
+              onPress={() => {
+                setSelectedSeatId(null);
+                setSelectedRoomId(null);
+              }}
+              activeOpacity={0.75}
+            >
+              <Ionicons name="arrow-back" size={13} color={COLORS.primary} />
+              <Text style={styles.changeRoomBtnText}>Change Room</Text>
+            </TouchableOpacity>
+          </View>
           
           {/* Map Legend */}
           <View style={styles.legendContainer}>
@@ -723,26 +824,48 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
                 <Text style={styles.confirmSeatSub}>High-Speed Wi-Fi • Power Outlet</Text>
               </View>
               <View style={{ alignItems: 'flex-end' }}>
-                <Text style={styles.confirmPrice}>
-                  ₹{bookingPlan === 'DAILY' ? '50' : bookingPlan === 'WEEKLY' ? '300' : '1,000'}
+                {bookingPlan === 'MONTHLY' && pricingConfig?.discountActive && Number(pricingConfig?.discountPercent) > 0 ? (
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={styles.strikethroughPrice}>₹{pricingConfig.monthlyBasePrice}</Text>
+                    <Text style={styles.confirmPrice}>₹{pricingConfig.monthlyPrice}</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.confirmPrice}>
+                    ₹{bookingPlan === 'DAILY' ? (pricingConfig?.dailyPrice || 50) : bookingPlan === 'WEEKLY' ? (pricingConfig?.weeklyPrice || 300) : (pricingConfig?.monthlyBasePrice || 1000)}
+                  </Text>
+                )}
+                <Text style={styles.confirmDuration}>
+                  / {bookingPlan.toLowerCase()} {bookingPlan === 'MONTHLY' && pricingConfig?.discountActive && Number(pricingConfig?.discountPercent) > 0 ? `(${pricingConfig.discountPercent}% OFF)` : ''}
                 </Text>
-                <Text style={styles.confirmDuration}>/ {bookingPlan.toLowerCase()}</Text>
               </View>
             </View>
 
             {/* Plan selector pills */}
             <View style={styles.planSelectorRow}>
-              {(['DAILY', 'WEEKLY', 'MONTHLY'] as const).map(plan => (
-                <TouchableOpacity
-                  key={plan}
-                  style={[styles.planPill, bookingPlan === plan && styles.planPillActive]}
-                  onPress={() => setBookingPlan(plan)}
-                >
-                  <Text style={[styles.planPillText, bookingPlan === plan && styles.planPillTextActive]}>
-                    {plan === 'DAILY' ? 'Daily Pass' : plan === 'WEEKLY' ? 'Weekly' : 'Monthly Pass'}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+              {(['DAILY', 'WEEKLY', 'MONTHLY'] as const).map(plan => {
+                const planPrice = plan === 'DAILY'
+                  ? (pricingConfig?.dailyPrice || 50)
+                  : plan === 'WEEKLY'
+                  ? (pricingConfig?.weeklyPrice || 300)
+                  : (pricingConfig?.discountActive && Number(pricingConfig?.discountPercent) > 0 ? pricingConfig.monthlyPrice : (pricingConfig?.monthlyBasePrice || 1000));
+
+                return (
+                  <TouchableOpacity
+                    key={plan}
+                    style={[styles.planPill, bookingPlan === plan && styles.planPillActive]}
+                    onPress={() => setBookingPlan(plan)}
+                  >
+                    <Text style={[styles.planPillText, bookingPlan === plan && styles.planPillTextActive]}>
+                      {plan === 'DAILY' ? `Daily (₹${planPrice})` : plan === 'WEEKLY' ? `Weekly (₹${planPrice})` : `Monthly (₹${planPrice})`}
+                    </Text>
+                    {plan === 'MONTHLY' && pricingConfig?.discountActive && Number(pricingConfig?.discountPercent) > 0 ? (
+                      <View style={styles.pillDiscountTag}>
+                        <Text style={styles.pillDiscountTagText}>{pricingConfig.discountPercent}% OFF</Text>
+                      </View>
+                    ) : null}
+                  </TouchableOpacity>
+                );
+              })}
             </View>
 
             <TouchableOpacity 
@@ -1132,14 +1255,15 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
       {/* Top App Bar */}
       <View style={styles.topAppBar}>
         <View style={styles.appBarLeft}>
-          {activeTab !== 'Home' ? (
+          {(activeTab !== 'Home' || selectedRoomId || isEditingProfile) ? (
             <TouchableOpacity 
               style={styles.backIconButton} 
-              onPress={() => setActiveTab('Home')}
+              onPress={handleStudentBack}
               activeOpacity={0.7}
-              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
             >
-              <Ionicons name="arrow-back" size={24} color={COLORS.primary} />
+              <Ionicons name="arrow-back" size={22} color={COLORS.primary} />
+              <Text style={styles.backButtonLabel}>Back</Text>
             </TouchableOpacity>
           ) : (
             <View style={styles.brandIconBox}>
@@ -1147,7 +1271,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
             </View>
           )}
           <Text style={styles.appBarTitle}>
-            {activeTab === 'Profile' ? 'My Profile' : activeTab === 'Book' ? 'Reserve Seat' : activeTab === 'My Bookings' ? 'My Bookings' : 'Sameer Library'}
+            {activeTab === 'Profile' ? 'My Profile' : activeTab === 'Book' ? (selectedRoomId ? 'Select Seat' : 'Reserve Seat') : activeTab === 'My Bookings' ? 'My Bookings' : 'Sameer Library'}
           </Text>
         </View>
 
@@ -2304,6 +2428,109 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 14,
     fontWeight: '700',
+  },
+
+  // Special offer promo card in Book tab
+  specialOfferPromoCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff7ed',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 16,
+    borderWidth: 1.5,
+    borderColor: '#ffedd5',
+    gap: 12,
+  },
+  specialOfferFireBox: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: '#f97316',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  specialOfferBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#ea580c',
+    letterSpacing: 0.5,
+  },
+  discountPillSmall: {
+    backgroundColor: '#ef4444',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  discountPillSmallText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#ffffff',
+  },
+  specialOfferHeadline: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#9a3412',
+    marginTop: 2,
+  },
+  specialOfferPricingSub: {
+    fontSize: 11,
+    color: '#7c2d12',
+    marginTop: 2,
+  },
+  offerGreenBold: {
+    fontWeight: '800',
+    color: '#15803d',
+    fontSize: 13,
+  },
+
+  // Change room button
+  changeRoomBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: COLORS.surfaceContainerLow,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  changeRoomBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  roomSubTitleText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+
+  // Strikethrough price & discount tags
+  strikethroughPrice: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    textDecorationLine: 'line-through',
+    fontWeight: '600',
+  },
+  pillDiscountTag: {
+    backgroundColor: '#ef4444',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+    marginLeft: 4,
+  },
+  pillDiscountTagText: {
+    fontSize: 8,
+    fontWeight: '800',
+    color: '#ffffff',
+  },
+  backButtonLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.primary,
+    marginLeft: 2,
   },
 });
 
