@@ -20,8 +20,8 @@ interface LoginScreenProps {
 const GOOGLE_ANDROID_CLIENT_ID = '560988320829-31goecj69287hpnbbm0vhuhrt6bjbl2v.apps.googleusercontent.com';
 const GOOGLE_WEB_CLIENT_ID = '560988320829-vn69cuihidkuvrt3cqhv62av9s1ja5sm.apps.googleusercontent.com';
 
-// Reversed client ID scheme matching app.json intentFilter
-const ANDROID_REDIRECT_URI = 'com.googleusercontent.apps.560988320829-31goecj69287hpnbbm0vhuhrt6bjbl2v:/oauthredirect';
+// Reversed client ID scheme matching Google Android OAuth spec
+const ANDROID_REDIRECT_URI = 'com.googleusercontent.apps.560988320829-31goecj69287hpnbbm0vhuhrt6bjbl2v:/oauth2redirect/google';
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigate }) => {
   const { login } = useAuth();

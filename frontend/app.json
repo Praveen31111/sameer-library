@@ -1,8 +1,11 @@
 {
   "expo": {
     "name": "Sameer Library",
-    "slug": "sameer-library-mobile",
-    "scheme": "sameerlibrary",
+    "slug": "sameer-library",
+    "scheme": [
+      "sameerlibrary",
+      "com.googleusercontent.apps.560988320829-31goecj69287hpnbbm0vhuhrt6bjbl2v"
+    ],
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -32,7 +35,10 @@
               "scheme": "sameerlibrary"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ],
       "adaptiveIcon": {
@@ -50,8 +56,9 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "c76f057e-c2d3-4e66-b257-0c53a9ea9743"
+        "projectId": "67779ad3-f164-4599-9a11-456dd430db38"
       }
-    }
+    },
+    "owner": "praveen-chaudharys-team"
   }
 }
