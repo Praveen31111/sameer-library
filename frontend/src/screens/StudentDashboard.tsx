@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, TextInput, Alert, Dimensions, SafeAreaView, ActivityIndicator, Platform, Image, Modal, StatusBar, BackHandler } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, TextInput, Alert, Dimensions, SafeAreaView, ActivityIndicator, Platform, Image, Modal, StatusBar, BackHandler, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../context/AuthContext';
@@ -58,6 +58,61 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
       if (user.college) setEditAddress(user.college);
     }
   }, [user]);
+
+  // Animation refs for dynamic animations
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const wifiAnim = useRef(new Animated.Value(1)).current;
+  const laserAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    // Pulse animation for Pending Approval / Active status
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 0.35,
+          duration: 850,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 850,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+
+    // WiFi signal wave animation
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(wifiAnim, {
+          toValue: 1.3,
+          duration: 1100,
+          useNativeDriver: true,
+        }),
+        Animated.timing(wifiAnim, {
+          toValue: 1,
+          duration: 1100,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+
+    // QR scanner laser line animation
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(laserAnim, {
+          toValue: 1,
+          duration: 2000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(laserAnim, {
+          toValue: 0,
+          duration: 2000,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, []);
 
   // Handle mobile slide-back gesture / Android hardware back button
   useEffect(() => {
@@ -314,33 +369,28 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
 
       if (res.success && res.booking) {
         const createdBooking = res.booking;
-        
-        // Trigger simulated payment
-        try {
-          const orderRes = await apiRequest('/payments/create-order', {
-            method: 'POST',
-            body: JSON.stringify({ bookingId: createdBooking.id }),
-          });
+        const bookedSeatNum = selectedSeatObj?.seatNumber || createdBooking.seat || 'Selected';
 
-          await apiRequest('/payments/verify', {
-            method: 'POST',
-            body: JSON.stringify({
-              bookingId: createdBooking.id,
-              razorpayOrderId: orderRes?.id || 'mock_order_id',
-              razorpayPaymentId: `pay_mock_${Math.floor(Math.random() * 1000000)}`,
-              razorpaySignature: 'mock_signature',
-            }),
-          });
-        } catch (e) {
-          // Dev mock fallback
-        }
+        // Prepend new booking so it instantly shows as the active booking on Home!
+        setBookingsList(prev => [{
+          ...createdBooking,
+          seat: bookedSeatNum,
+          room: selectedBranch?.rooms?.find((r: any) => r.id === selectedRoomId)?.name || 'Quiet Zone',
+          branch: selectedBranch?.name || 'Main Library',
+          status: 'pending',
+          planType: bookingPlan,
+        }, ...prev]);
 
         setLoading(false);
         setSelectedSeatId(null);
+
         Alert.alert(
-          'Booking Confirmed! 🎉',
-          'Your seat reservation has been submitted successfully and is active.',
-          [{ text: 'View Bookings', onPress: () => setActiveTab('My Bookings') }]
+          'Reservation Requested! 📋',
+          `Your booking for Seat ${bookedSeatNum} has been submitted! It is currently pending approval by the library administrator. You can track the status in 'My Bookings'.`,
+          [
+            { text: 'View Bookings', onPress: () => setActiveTab('My Bookings') },
+            { text: 'Go to Home', onPress: () => setActiveTab('Home') }
+          ]
         );
         fetchOverviewData();
       } else {
@@ -353,10 +403,32 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
     }
   };
 
-  // Find currently active booking if any
-  const activeBooking = bookingsList.find(b => b.status === 'APPROVED' || b.status === 'CONFIRMED' || b.status === 'PENDING') || bookingsList[0];
+  // Find currently active booking (case-insensitive status check)
+  const activeBooking = bookingsList.find(b => {
+    const s = (b.status || '').toUpperCase();
+    return s === 'APPROVED' || s === 'CONFIRMED' || s === 'PENDING';
+  }) || bookingsList[0];
+
   const selectedSeatObj = seatsList.find(s => s.id === selectedSeatId);
   const selectedBranch = branches.find(b => b.id === selectedBranchId) || branches[0];
+
+  // Resolve actual seat number and status
+  const currentSeatRaw = activeBooking?.seat 
+    ? (typeof activeBooking.seat === 'string' ? activeBooking.seat : (activeBooking.seat.seatNumber || 'A-01'))
+    : (selectedSeatObj?.seatNumber || 'A-01');
+  const currentSeatName = currentSeatRaw.startsWith('Seat') ? currentSeatRaw : `Seat ${currentSeatRaw}`;
+
+  const currentRoomName = activeBooking?.room 
+    ? (typeof activeBooking.room === 'string' ? activeBooking.room : (activeBooking.room.name || 'Quiet Zone'))
+    : (selectedBranch?.rooms?.[0]?.name || 'Quiet Zone');
+
+  const currentBranchName = activeBooking?.branch 
+    ? (typeof activeBooking.branch === 'string' ? activeBooking.branch : (activeBooking.branch.name || 'Main Library'))
+    : (selectedBranch?.name || 'Main Library');
+
+  const bookingStatusUpper = (activeBooking?.status || 'PENDING').toUpperCase();
+  const isApproved = bookingStatusUpper === 'APPROVED' || bookingStatusUpper === 'CONFIRMED';
+  const isPending = bookingStatusUpper === 'PENDING';
 
   // -------------------------------------------------------------
   // TAB 1: HOME (OVERVIEW)
@@ -373,21 +445,28 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
         {/* Active Booking Bento Card */}
         <View style={styles.activeBookingCard}>
           <View style={styles.activeBookingHeader}>
-            <View>
-              <Text style={styles.cardSuperLabel}>Seat Assignment</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.cardSuperLabel}>SEAT ASSIGNMENT</Text>
               <View style={styles.seatTitleRow}>
                 <Text style={styles.bigSeatCode}>
-                  {activeBooking ? (activeBooking.seat?.seatNumber || `Seat #${activeBooking.seatId?.slice(-3) || '42'}`) : 'A-42'}
+                  {activeBooking ? currentSeatName : 'No Seat Assigned'}
                 </Text>
-                <View style={styles.activeNowBadge}>
-                  <View style={styles.activeNowDot} />
-                  <Text style={styles.activeNowText}>
-                    {activeBooking ? (activeBooking.status === 'APPROVED' ? 'Active Now' : 'Pending Approval') : 'Available'}
-                  </Text>
-                </View>
+                {isPending ? (
+                  <Animated.View style={[styles.pendingApprovalBadge, { opacity: pulseAnim }]}>
+                    <Animated.View style={[styles.pendingDot, { transform: [{ scale: pulseAnim }] }]} />
+                    <Text style={styles.pendingApprovalText}>Pending Approval</Text>
+                  </Animated.View>
+                ) : (
+                  <View style={styles.activeNowBadge}>
+                    <Animated.View style={[styles.activeNowDot, { opacity: pulseAnim }]} />
+                    <Text style={styles.activeNowText}>
+                      {isApproved ? 'Active Now' : 'Available'}
+                    </Text>
+                  </View>
+                )}
               </View>
               <Text style={styles.activeLocationText}>
-                {activeBooking?.room?.name || 'Quiet Zone'}, {activeBooking?.branch?.name || 'Main Library'}
+                {currentRoomName}, {currentBranchName}
               </Text>
             </View>
           </View>
@@ -411,8 +490,11 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
             </View>
 
             <View style={styles.amenityRow}>
-              <Ionicons name="wifi-outline" size={16} color={COLORS.textSecondary} />
+              <Animated.View style={{ transform: [{ scale: wifiAnim }] }}>
+                <Ionicons name="wifi" size={17} color={COLORS.primary} />
+              </Animated.View>
               <Text style={styles.amenitySmallText}>High-Speed Wi-Fi & Power socket available</Text>
+              <Animated.View style={[styles.liveSignalDot, { opacity: pulseAnim }]} />
             </View>
           </View>
 
@@ -803,10 +885,10 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
   const renderProfileTab = () => {
     return (
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Profile Header */}
-        <View style={styles.profileHeader}>
+        {/* Modern Profile Header Card */}
+        <View style={styles.modernProfileCard}>
           <TouchableOpacity 
-            style={styles.avatarContainer} 
+            style={styles.avatarGlowContainer} 
             activeOpacity={0.85}
             onPress={handlePickImage}
           >
@@ -814,26 +896,27 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
               source={{ uri: profilePhoto }}
               style={styles.profileAvatar}
             />
-            <View style={styles.avatarEditBtn}>
-              <Ionicons name="camera" size={15} color="#ffffff" />
+            <View style={styles.avatarCameraBadge}>
+              <Ionicons name="camera" size={16} color="#ffffff" />
             </View>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.changePhotoBtn} onPress={handlePickImage} activeOpacity={0.8}>
-            <Ionicons name="image-outline" size={15} color={COLORS.primary} />
-            <Text style={styles.changePhotoBtnText}>Upload / Change Photo</Text>
+          <TouchableOpacity style={styles.modernUploadBtn} onPress={handlePickImage} activeOpacity={0.85}>
+            <Ionicons name="cloud-upload-outline" size={16} color={COLORS.primary} />
+            <Text style={styles.modernUploadBtnText}>Upload Photo from Mobile</Text>
           </TouchableOpacity>
 
-          <Text style={styles.profileName}>{editName || user?.name || 'Student Member'}</Text>
-          <Text style={styles.profileRole}>{user?.role || 'Active Student'}</Text>
+          <Text style={styles.profileName}>{editName || user?.name || 'Demo Student'}</Text>
+          <Text style={styles.profileRole}>Sameer Library Member</Text>
 
           <View style={styles.memberBadgesRow}>
             <View style={styles.memberBadge}>
-              <View style={styles.memberBadgeDot} />
-              <Text style={styles.memberBadgeText}>Active Member</Text>
+              <Ionicons name="checkmark-circle" size={14} color={COLORS.primary} />
+              <Text style={styles.memberBadgeText}>Verified Student</Text>
             </View>
             <View style={[styles.memberBadge, { backgroundColor: COLORS.secondaryContainer }]}>
-              <Text style={[styles.memberBadgeText, { color: COLORS.onSecondaryContainer }]}>Pro Plan</Text>
+              <Ionicons name="star" size={12} color={COLORS.onSecondaryContainer} />
+              <Text style={[styles.memberBadgeText, { color: COLORS.onSecondaryContainer }]}>Pro Access</Text>
             </View>
           </View>
         </View>
@@ -848,14 +931,26 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
             <Ionicons name="book" size={28} color={COLORS.primary} />
           </View>
 
-          {/* QR Code Container */}
+          {/* QR Code Container with Animated Laser Line */}
           <TouchableOpacity 
             style={styles.qrCodeBox} 
             activeOpacity={0.9}
             onPress={() => Alert.alert('Digital Pass QR', 'Hold this QR code against the gate turnstile scanner.')}
           >
             <Ionicons name="qr-code" size={140} color={COLORS.text} />
-            <View style={styles.scanLine} />
+            <Animated.View 
+              style={[
+                styles.scanLine, 
+                {
+                  transform: [{
+                    translateY: laserAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [-65, 65],
+                    }),
+                  }],
+                },
+              ]} 
+            />
           </TouchableOpacity>
 
           <View style={styles.digitalIdFooter}>
@@ -1240,6 +1335,35 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: COLORS.onSecondaryContainer,
+  },
+  pendingApprovalBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fef3c7',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: '#fde68a',
+  },
+  pendingDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#d97706',
+  },
+  pendingApprovalText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#b45309',
+  },
+  liveSignalDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: COLORS.primary,
+    marginLeft: 6,
   },
   activeLocationText: {
     fontSize: 14,
@@ -1823,6 +1947,70 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: COLORS.error,
+  },
+  modernProfileCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 20,
+    paddingVertical: 24,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.05,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 2,
+      },
+      web: {
+        boxShadow: '0px 4px 16px rgba(0,0,0,0.04)',
+      },
+    }),
+  },
+  avatarGlowContainer: {
+    position: 'relative',
+    marginBottom: 12,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  avatarCameraBadge: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2.5,
+    borderColor: COLORS.surface,
+    elevation: 3,
+  },
+  modernUploadBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: COLORS.surfaceContainerLow,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+  },
+  modernUploadBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.primary,
   },
   profileHeader: {
     alignItems: 'center',
