@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, TextInput, SafeAreaView, KeyboardAvoidingView, Platform, Alert, TouchableOpacity, ScrollView } from 'react-native';
+import { StyleSheet, Text, View, TextInput, SafeAreaView, KeyboardAvoidingView, Platform, Alert, TouchableOpacity, ScrollView, StatusBar } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { apiRequest } from '../services/api';
 import { COLORS } from '../utils/constants';
@@ -79,18 +79,23 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ onNavigate }) =>
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           {/* Top Bar with Back Button */}
           <View style={styles.topBar}>
-            <TouchableOpacity style={styles.backButton} onPress={() => onNavigate('Home')} activeOpacity={0.7}>
-              <Ionicons name="arrow-back" size={22} color={COLORS.text} />
+            <TouchableOpacity 
+              style={styles.backButton} 
+              onPress={() => onNavigate('Home')} 
+              activeOpacity={0.7}
+              hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+            >
+              <Ionicons name="arrow-back" size={24} color={COLORS.text} />
             </TouchableOpacity>
-            <Text style={styles.topBarBrand}>LibReserve</Text>
-            <View style={{ width: 40 }} />
+            <Text style={styles.topBarBrand}>Sameer Library</Text>
+            <View style={{ width: 44 }} />
           </View>
 
           {/* Heading Section */}
           <View style={styles.headerSection}>
             <Text style={styles.title}>Create Account</Text>
             <Text style={styles.subtitle}>
-              Join LibReserve to book your preferred study space effortlessly.
+              Join Sameer Library to book your preferred study space effortlessly.
             </Text>
           </View>
 
@@ -251,6 +256,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 28) : 0,
   },
   keyboardView: {
     flex: 1,
@@ -267,9 +273,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: COLORS.surfaceContainerLow,
     alignItems: 'center',
     justifyContent: 'center',

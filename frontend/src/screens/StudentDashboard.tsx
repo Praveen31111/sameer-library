@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, TextInput, Alert, Dimensions, SafeAreaView, ActivityIndicator, Platform, Image, Modal } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, TextInput, Alert, Dimensions, SafeAreaView, ActivityIndicator, Platform, Image, Modal, StatusBar } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { apiRequest } from '../services/api';
@@ -771,7 +771,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
           <View style={styles.brandIconBox}>
             <Ionicons name="book" size={18} color="#ffffff" />
           </View>
-          <Text style={styles.appBarTitle}>LibReserve</Text>
+          <Text style={styles.appBarTitle}>Sameer Library</Text>
         </View>
 
         <View style={styles.appBarRight}>
@@ -811,6 +811,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 28) : 0,
   },
   scrollContent: {
     paddingHorizontal: 20,

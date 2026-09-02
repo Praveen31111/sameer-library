@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, TextInput, SafeAreaView, KeyboardAvoidingView, Platform, Alert, TouchableOpacity, ScrollView } from 'react-native';
+import { StyleSheet, Text, View, TextInput, SafeAreaView, KeyboardAvoidingView, Platform, Alert, TouchableOpacity, ScrollView, StatusBar } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Button } from '../components/Button';
 import { useAuth } from '../context/AuthContext';
@@ -175,16 +175,21 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigate }) => {
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           {/* Top Bar with Back Button */}
           <View style={styles.topBar}>
-            <TouchableOpacity style={styles.backButton} onPress={() => onNavigate('Home')} activeOpacity={0.7}>
-              <Ionicons name="arrow-back" size={22} color={COLORS.text} />
+            <TouchableOpacity 
+              style={styles.backButton} 
+              onPress={() => onNavigate('Home')} 
+              activeOpacity={0.7}
+              hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+            >
+              <Ionicons name="arrow-back" size={24} color={COLORS.text} />
             </TouchableOpacity>
-            <Text style={styles.topBarBrand}>LibReserve</Text>
-            <View style={{ width: 40 }} />
+            <Text style={styles.topBarBrand}>Sameer Library</Text>
+            <View style={{ width: 44 }} />
           </View>
 
           {/* Logo & Header */}
           <View style={styles.headerSection}>
-            <Text style={styles.brandTitle}>LibReserve</Text>
+            <Text style={styles.brandTitle}>Sameer Library</Text>
             <Text style={styles.brandSubtitle}>Premium space for deep work.</Text>
           </View>
 
@@ -221,7 +226,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigate }) => {
               <View style={styles.inputWrapper}>
                 <TextInput
                   style={styles.input}
-                  placeholder={activeTab === 'student' ? 'student@university.edu' : 'admin@sameerlibrary.com'}
+                  placeholder={activeTab === 'student' ? 'student@sameerlibrary.com' : 'admin@sameerlibrary.com'}
                   placeholderTextColor={COLORS.outline}
                   value={email}
                   onChangeText={setEmail}
@@ -268,8 +273,18 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigate }) => {
 
             {/* Quick Demo Credentials Assistant */}
             <View style={styles.demoBox}>
-              <Text style={styles.demoTitle}>Quick Fill Demo Account:</Text>
+              <Text style={styles.demoTitle}>Quick Fill Demo Accounts:</Text>
               <View style={styles.demoChipsRow}>
+                <TouchableOpacity 
+                  style={[styles.demoChip, { marginRight: 8 }]} 
+                  onPress={() => {
+                    setActiveTab('student');
+                    setEmail('student@sameerlibrary.com');
+                    setPassword('student123');
+                  }}
+                >
+                  <Text style={styles.demoChipText}>🎓 Student</Text>
+                </TouchableOpacity>
                 <TouchableOpacity 
                   style={styles.demoChip} 
                   onPress={() => {
@@ -278,7 +293,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigate }) => {
                     setPassword('admin123');
                   }}
                 >
-                  <Text style={styles.demoChipText}>Admin (admin@sameerlibrary.com)</Text>
+                  <Text style={styles.demoChipText}>⚡ Admin</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -325,6 +340,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 28) : 0,
   },
   keyboardView: {
     flex: 1,
@@ -341,9 +357,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: COLORS.surfaceContainerLow,
     alignItems: 'center',
     justifyContent: 'center',

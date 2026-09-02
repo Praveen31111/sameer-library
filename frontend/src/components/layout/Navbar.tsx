@@ -18,7 +18,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onLogoPress,
   onNotificationPress,
   onProfilePress,
-  title = 'LibReserve',
+  title = 'Sameer Library',
   showBack = false,
   onBackPress,
 }) => {
@@ -88,7 +88,7 @@ const styles = StyleSheet.create({
       },
       android: {
         elevation: 2,
-        paddingTop: StatusBar.currentHeight,
+        paddingTop: StatusBar.currentHeight || 28,
       },
       web: {
         position: 'sticky' as any,

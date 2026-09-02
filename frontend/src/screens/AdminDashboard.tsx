@@ -1242,9 +1242,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
           />
           <View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Text style={styles.headerTitle}>Admin Portal</Text>
+              <Text style={styles.headerTitle}>Sameer Library</Text>
               <View style={styles.versionBadge}>
-                <Text style={styles.versionBadgeText}>v1.0.4</Text>
+                <Text style={styles.versionBadgeText}>ADMIN</Text>
               </View>
             </View>
             <Text style={styles.headerSubtitle}>Management System</Text>
@@ -1520,7 +1520,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 28) : 0,
   },
   centerContainer: {
     flex: 1,

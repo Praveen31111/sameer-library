@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { ActivityIndicator, View, StyleSheet } from 'react-native';
+import { ActivityIndicator, View, StyleSheet, BackHandler, Platform } from 'react-native';
 import { AuthProvider, useAuth } from './src/context';
 import {
   HomeScreen,
@@ -29,6 +29,20 @@ function AppContent() {
       }
     }
   }, [user, loading]);
+
+  // Handle Android hardware back button
+  useEffect(() => {
+    const onBackPress = () => {
+      if (currentScreen === 'Login' || currentScreen === 'Register') {
+        setCurrentScreen('Home');
+        return true;
+      }
+      return false;
+    };
+
+    const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => subscription.remove();
+  }, [currentScreen]);
 
   if (loading) {
     return (
