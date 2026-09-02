@@ -1,9 +1,11 @@
 import React, { useState, useRef } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Alert, Dimensions } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Alert, Dimensions, Image, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Navbar } from '../components/Navbar';
 import { Drawer } from '../components/Drawer';
+import { BottomNavBar, BottomNavTab } from '../components/BottomNavBar';
 import { useAuth } from '../context/AuthContext';
+import { COLORS } from '../utils/constants';
 
 interface HomeScreenProps {
   onNavigate: (screen: 'Home' | 'Login' | 'Register' | 'StudentDashboard' | 'AdminDashboard') => void;
@@ -14,14 +16,14 @@ const { width } = Dimensions.get('window');
 export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
   const { user } = useAuth();
   const [drawerVisible, setDrawerVisible] = useState(false);
+  const [activeBottomTab, setActiveBottomTab] = useState<BottomNavTab>('Home');
   
   // Interactive seat grid state
-  const [selectedSeat, setSelectedSeat] = useState<string | null>('A3'); // A3 selected by default
-  const bookedSeats = ['B1', 'B3']; // Mock booked seats
+  const [selectedSeat, setSelectedSeat] = useState<string | null>('B1');
+  const bookedSeats = ['A3', 'A4', 'C1', 'C2', 'D3', 'D4'];
 
   const scrollViewRef = useRef<ScrollView>(null);
 
-  // Approximate section offsets for scrolling anchors
   const handleDrawerNavigate = (screen: 'Home' | 'Login' | 'Register' | 'StudentDashboard' | 'AdminDashboard', anchor?: string) => {
     if (screen !== 'Home') {
       onNavigate(screen);
@@ -30,11 +32,36 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
 
     if (anchor) {
       let scrollY = 0;
-      if (anchor === 'features') scrollY = 700;
-      if (anchor === 'about') scrollY = 1200;
-      if (anchor === 'contact') scrollY = 1650;
+      if (anchor === 'features') scrollY = 750;
+      if (anchor === 'about') scrollY = 1350;
+      if (anchor === 'contact') scrollY = 1850;
       
       scrollViewRef.current?.scrollTo({ y: scrollY, animated: true });
+    }
+  };
+
+  const handleBottomTabPress = (tab: BottomNavTab) => {
+    setActiveBottomTab(tab);
+    if (tab === 'Home') {
+      scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+    } else if (tab === 'Book') {
+      if (user) {
+        onNavigate(user.role === 'ADMIN' || user.role === 'OWNER' ? 'AdminDashboard' : 'StudentDashboard');
+      } else {
+        onNavigate('Register');
+      }
+    } else if (tab === 'My Bookings') {
+      if (user) {
+        onNavigate('StudentDashboard');
+      } else {
+        onNavigate('Login');
+      }
+    } else if (tab === 'Profile') {
+      if (user) {
+        onNavigate(user.role === 'ADMIN' || user.role === 'OWNER' ? 'AdminDashboard' : 'StudentDashboard');
+      } else {
+        onNavigate('Login');
+      }
     }
   };
 
@@ -48,10 +75,24 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
 
   return (
     <View style={styles.container}>
-      {/* Header Navbar */}
+      {/* Top Header Navbar */}
       <Navbar 
         onMenuPress={() => setDrawerVisible(true)} 
         onLogoPress={() => scrollViewRef.current?.scrollTo({ y: 0, animated: true })}
+        onNotificationPress={() => {
+          if (user) {
+            Alert.alert('Notifications', 'You have no new notifications at this time.');
+          } else {
+            onNavigate('Login');
+          }
+        }}
+        onProfilePress={() => {
+          if (user) {
+            onNavigate(user.role === 'ADMIN' || user.role === 'OWNER' ? 'AdminDashboard' : 'StudentDashboard');
+          } else {
+            onNavigate('Login');
+          }
+        }}
       />
 
       {/* Navigation Drawer Overlay */}
@@ -61,27 +102,31 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
         onNavigate={handleDrawerNavigate}
       />
 
-      <ScrollView ref={scrollViewRef} contentContainerStyle={styles.scrollContent}>
+      <ScrollView 
+        ref={scrollViewRef} 
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Hero Section */}
         <View style={styles.heroSection}>
-          <View style={styles.lucknowBadge}>
-            <Text style={styles.lucknowBadgeText}>✨ Now Open in Lucknow</Text>
+          <View style={styles.liveBadge}>
+            <View style={styles.liveDot} />
+            <Text style={styles.liveBadgeText}>Available Seats Near You</Text>
           </View>
           
           <Text style={styles.heroTitle}>
-            Your Perfect{'\n'}
-            <Text style={styles.heroTitleTeal}>Study Space</Text>{'\n'}
-            Awaits
+            Find Your Perfect Space for{' '}
+            <Text style={styles.heroTitleTeal}>Deep Work.</Text>
           </Text>
 
           <Text style={styles.heroDescription}>
-            Book your favorite seat at Sameer Library. Enjoy a peaceful study environment with modern amenities, secure access, and flexible plans.
+            Book quiet, comfortable library seats instantly. Focus on what matters, we'll handle the space.
           </Text>
 
           <View style={styles.heroButtonsContainer}>
             <TouchableOpacity 
               style={styles.primaryButton}
-              activeOpacity={0.8}
+              activeOpacity={0.85}
               onPress={() => {
                 if (user) {
                   if (user.role === 'ADMIN' || user.role === 'OWNER') {
@@ -94,205 +139,256 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
                 }
               }}
             >
-              <Text style={styles.primaryButtonText}>Book Your Seat</Text>
-              <Ionicons name="chevron-forward-outline" size={18} color="#ffffff" />
+              <Text style={styles.primaryButtonText}>Book a Seat</Text>
+              <Ionicons name="arrow-forward" size={18} color="#ffffff" />
             </TouchableOpacity>
 
             <TouchableOpacity 
               style={styles.secondaryButton}
-              activeOpacity={0.8}
-              onPress={() => scrollViewRef.current?.scrollTo({ y: 700, animated: true })}
+              activeOpacity={0.85}
+              onPress={() => scrollViewRef.current?.scrollTo({ y: 550, animated: true })}
             >
-              <Text style={styles.secondaryButtonText}>Learn More</Text>
+              <Text style={styles.secondaryButtonText}>Explore Libraries</Text>
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Quick Book Seat Preview Visual */}
-        <View style={styles.previewContainer}>
-          <View style={styles.previewCard}>
-            <View style={styles.previewHeader}>
-              <Text style={styles.previewTitle}>Quick Book</Text>
-              <View style={styles.availableBadge}>
-                <Text style={styles.availableBadgeText}>Available Now</Text>
+        {/* Quick Actions Bento */}
+        <View style={styles.quickActionsGrid}>
+          <TouchableOpacity 
+            style={styles.quickActionCard} 
+            activeOpacity={0.85}
+            onPress={() => Alert.alert('Digital Pass', 'Scan QR at library gate for automated entry.')}
+          >
+            <View style={styles.quickActionIconContainer}>
+              <Ionicons name="qr-code-outline" size={24} color={COLORS.onSecondaryContainer} />
+            </View>
+            <Text style={styles.quickActionTitle}>Scan to Enter</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.quickActionCard} 
+            activeOpacity={0.85}
+            onPress={() => scrollViewRef.current?.scrollTo({ y: 550, animated: true })}
+          >
+            <View style={[styles.quickActionIconContainer, { backgroundColor: COLORS.surfaceContainerLow }]}>
+              <Ionicons name="map-outline" size={24} color={COLORS.primary} />
+            </View>
+            <Text style={styles.quickActionTitle}>Map View</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Featured Spaces (Bento Grid Style from Stitch) */}
+        <View style={styles.sectionContainer}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionHeaderTitle}>Featured Spaces</Text>
+            <TouchableOpacity 
+              onPress={() => {
+                if (user) onNavigate('StudentDashboard');
+                else onNavigate('Register');
+              }}
+              style={styles.viewAllBtn}
+            >
+              <Text style={styles.viewAllText}>View all</Text>
+              <Ionicons name="chevron-forward" size={14} color={COLORS.primary} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Space Card 1 */}
+          <TouchableOpacity 
+            style={styles.spaceCard}
+            activeOpacity={0.9}
+            onPress={() => {
+              if (user) onNavigate('StudentDashboard');
+              else onNavigate('Register');
+            }}
+          >
+            <View style={styles.spaceImageContainer}>
+              <Image 
+                source={{ uri: 'https://images.unsplash.com/photo-1521587760476-6c12a4b040da?auto=format&fit=crop&w=800&q=80' }}
+                style={styles.spaceImage}
+              />
+              <View style={styles.ratingBadge}>
+                <Ionicons name="star" size={14} color={COLORS.primary} />
+                <Text style={styles.ratingText}>4.8</Text>
               </View>
             </View>
-
-            <View style={styles.pickerPlaceholder}>
-              <Text style={styles.pickerLabel}>Branch</Text>
-              <View style={styles.pickerBox}>
-                <Text style={styles.pickerBoxText}>📍 Sameer Library - Mohanapur</Text>
+            <View style={styles.spaceCardBody}>
+              <Text style={styles.spaceName}>Central City Library</Text>
+              <View style={styles.spaceLocationRow}>
+                <Ionicons name="location-outline" size={16} color={COLORS.textSecondary} />
+                <Text style={styles.spaceLocationText}>Downtown District, 1.2mi</Text>
+              </View>
+              <View style={styles.spaceFooterRow}>
+                <View style={styles.seatPill}>
+                  <View style={styles.seatPillDot} />
+                  <Text style={styles.seatPillText}>42 Seats Left</Text>
+                </View>
+                <View style={styles.amenityItem}>
+                  <Ionicons name="wifi-outline" size={16} color={COLORS.outline} />
+                  <Text style={styles.amenityText}>Fast Wi-Fi</Text>
+                </View>
               </View>
             </View>
+          </TouchableOpacity>
 
-            <View style={styles.pickerPlaceholder}>
-              <Text style={styles.pickerLabel}>Room</Text>
-              <View style={styles.pickerBox}>
-                <Text style={styles.pickerBoxText}>🤫 Silent Zone</Text>
+          {/* Space Card 2 */}
+          <TouchableOpacity 
+            style={styles.spaceCard}
+            activeOpacity={0.9}
+            onPress={() => {
+              if (user) onNavigate('StudentDashboard');
+              else onNavigate('Register');
+            }}
+          >
+            <View style={styles.spaceImageContainer}>
+              <Image 
+                source={{ uri: 'https://images.unsplash.com/photo-1497633762265-9d179a990aa6?auto=format&fit=crop&w=800&q=80' }}
+                style={styles.spaceImage}
+              />
+              <View style={styles.ratingBadge}>
+                <Ionicons name="star" size={14} color={COLORS.primary} />
+                <Text style={styles.ratingText}>4.5</Text>
               </View>
             </View>
+            <View style={styles.spaceCardBody}>
+              <Text style={styles.spaceName}>Westside Branch</Text>
+              <View style={styles.spaceLocationRow}>
+                <Ionicons name="location-outline" size={16} color={COLORS.textSecondary} />
+                <Text style={styles.spaceLocationText}>West End, 2.5mi</Text>
+              </View>
+              <View style={styles.spaceFooterRow}>
+                <View style={[styles.seatPill, { backgroundColor: COLORS.surfaceContainerHighest }]}>
+                  <View style={[styles.seatPillDot, { backgroundColor: COLORS.outline }]} />
+                  <Text style={[styles.seatPillText, { color: COLORS.textSecondary }]}>12 Seats Left</Text>
+                </View>
+                <View style={styles.amenityItem}>
+                  <Ionicons name="cafe-outline" size={16} color={COLORS.outline} />
+                  <Text style={styles.amenityText}>Cafe Inside</Text>
+                </View>
+              </View>
+            </View>
+          </TouchableOpacity>
+        </View>
 
-            {/* Dynamic Grid Layout */}
-            <View style={styles.seatGridContainer}>
-              <Text style={styles.pickerLabel}>Select Seat (Tap to try)</Text>
-              <View style={styles.seatGrid}>
-                {['A1', 'A2', 'A3', 'A4', 'A5', 'B1', 'B2', 'B3', 'B4', 'B5'].map((seat) => {
-                  const isBooked = bookedSeats.includes(seat);
-                  const isSelected = selectedSeat === seat;
+        {/* Interactive Live Seat Preview */}
+        <View style={styles.previewSection}>
+          <View style={styles.previewHeaderRow}>
+            <View>
+              <Text style={styles.previewTitle}>Live Seat Preview</Text>
+              <Text style={styles.previewSubtitle}>Tap any available seat to preview reservation</Text>
+            </View>
+            <View style={styles.liveAvailableBadge}>
+              <Text style={styles.liveAvailableText}>Quiet Zone</Text>
+            </View>
+          </View>
 
-                  return (
-                    <TouchableOpacity
-                      key={seat}
-                      activeOpacity={0.7}
-                      onPress={() => handleSeatPress(seat)}
-                      style={[
-                        styles.seatCell,
-                        isBooked && styles.seatBooked,
-                        isSelected && styles.seatSelected,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.seatCellText,
-                          isBooked && styles.seatTextBooked,
-                          isSelected && styles.seatTextSelected,
-                        ]}
-                      >
+          {/* Seat Grid Box */}
+          <View style={styles.seatGridBox}>
+            <View style={styles.seatGrid}>
+              {['A1', 'A2', 'A3', 'A4', 'B1', 'B2', 'B3', 'B4', 'C1', 'C2', 'C3', 'C4', 'D1', 'D2', 'D3', 'D4'].map((seat) => {
+                const isBooked = bookedSeats.includes(seat);
+                const isSelected = selectedSeat === seat;
+
+                return (
+                  <TouchableOpacity
+                    key={seat}
+                    activeOpacity={0.7}
+                    onPress={() => handleSeatPress(seat)}
+                    style={[
+                      styles.seatButton,
+                      isBooked && styles.seatButtonBooked,
+                      isSelected && styles.seatButtonSelected,
+                    ]}
+                  >
+                    {isBooked ? (
+                      <Ionicons name="person" size={14} color={COLORS.outline} />
+                    ) : (
+                      <Text style={[styles.seatButtonText, isSelected && styles.seatButtonTextSelected]}>
                         {seat}
                       </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
             </View>
 
-            {/* Seat Map Legend */}
+            {/* Map Legend */}
             <View style={styles.legendRow}>
               <View style={styles.legendItem}>
                 <View style={[styles.legendBox, styles.legendAvailable]} />
-                <Text style={styles.legendLabelText}>Available</Text>
+                <Text style={styles.legendLabel}>Available</Text>
               </View>
               <View style={styles.legendItem}>
                 <View style={[styles.legendBox, styles.legendSelected]} />
-                <Text style={styles.legendLabelText}>Selected</Text>
+                <Text style={styles.legendLabel}>Selected</Text>
               </View>
               <View style={styles.legendItem}>
                 <View style={[styles.legendBox, styles.legendBooked]} />
-                <Text style={styles.legendLabelText}>Booked</Text>
+                <Text style={styles.legendLabel}>Booked</Text>
               </View>
             </View>
-          </View>
 
-          {/* Floating pricing badge */}
-          <View style={styles.priceBadge}>
-            <Text style={styles.priceBadgeText}>From ₹50/day</Text>
+            {/* Selected Seat Details Banner */}
+            {selectedSeat && (
+              <View style={styles.selectedSeatBanner}>
+                <View>
+                  <Text style={styles.selectedSeatTitle}>Seat {selectedSeat} Selected</Text>
+                  <Text style={styles.selectedSeatSubtitle}>High-speed Wi-Fi • Power outlet</Text>
+                </View>
+                <TouchableOpacity 
+                  style={styles.confirmSelectionBtn}
+                  onPress={() => {
+                    if (user) onNavigate('StudentDashboard');
+                    else onNavigate('Register');
+                  }}
+                >
+                  <Text style={styles.confirmSelectionText}>Confirm</Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         </View>
 
-        {/* Stats Section */}
-        <View style={styles.statsSection}>
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>2+</Text>
-            <Text style={styles.statLabel}>Branches</Text>
+        {/* Core Value Props */}
+        <View style={styles.statsRow}>
+          <View style={styles.statCard}>
+            <Text style={styles.statNumber}>2+</Text>
+            <Text style={styles.statCaption}>Branches</Text>
           </View>
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>100+</Text>
-            <Text style={styles.statLabel}>Seats</Text>
+          <View style={styles.statCard}>
+            <Text style={styles.statNumber}>150+</Text>
+            <Text style={styles.statCaption}>Study Seats</Text>
           </View>
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>500+</Text>
-            <Text style={styles.statLabel}>Students</Text>
+          <View style={styles.statCard}>
+            <Text style={styles.statNumber}>500+</Text>
+            <Text style={styles.statCaption}>Students</Text>
           </View>
-          <View style={styles.statBox}>
-            <Text style={styles.statValue}>24/7</Text>
-            <Text style={styles.statLabel}>Access</Text>
-          </View>
-        </View>
-
-        {/* Features Section */}
-        <View style={styles.section} id="features">
-          <View style={styles.sectionHeader}>
-            <View style={styles.sectionBadge}>
-              <Text style={styles.sectionBadgeText}>Features</Text>
-            </View>
-            <Text style={styles.sectionTitle}>
-              Everything You Need to {'\n'}
-              <Text style={styles.heroTitleTeal}>Study Smart</Text>
-            </Text>
-            <Text style={styles.sectionSubtitle}>
-              We've designed our library experience to be seamless, modern, and student-friendly.
-            </Text>
-          </View>
-
-          {/* Feature Grid List */}
-          <View style={styles.featureList}>
-            <View style={styles.featureCard}>
-              <View style={styles.featureIconContainer}>
-                <Ionicons name="calendar" size={24} color="#0d9488" />
-              </View>
-              <View style={styles.featureContent}>
-                <Text style={styles.featureTitle}>Easy Seat Booking</Text>
-                <Text style={styles.featureDesc}>
-                  Select your preferred branch, room, and seat. Book daily, weekly, or monthly plans with just a few taps.
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.featureCard}>
-              <View style={styles.featureIconContainer}>
-                <Ionicons name="card" size={24} color="#0d9488" />
-              </View>
-              <View style={styles.featureContent}>
-                <Text style={styles.featureTitle}>Secure Online Payment</Text>
-                <Text style={styles.featureDesc}>
-                  Pay securely via Razorpay integration. Get instant confirmation and digital invoices for all your bookings.
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.featureCard}>
-              <View style={styles.featureIconContainer}>
-                <Ionicons name="finger-print" size={24} color="#0d9488" />
-              </View>
-              <View style={styles.featureContent}>
-                <Text style={styles.featureTitle}>Fingerprint Attendance</Text>
-                <Text style={styles.featureDesc}>
-                  Quick check-in and check-out with biometric fingerprint integration. Track your study hours automatically.
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.featureCard}>
-              <View style={styles.featureIconContainer}>
-                <Ionicons name="business" size={24} color="#0d9488" />
-              </View>
-              <View style={styles.featureContent}>
-                <Text style={styles.featureTitle}>Multi-Branch Access</Text>
-                <Text style={styles.featureDesc}>
-                  Access any of our library branches with a single account. Switch study locations easily as per your needs.
-                </Text>
-              </View>
-            </View>
+          <View style={styles.statCard}>
+            <Text style={styles.statNumber}>24/7</Text>
+            <Text style={styles.statCaption}>CCTV Safe</Text>
           </View>
         </View>
 
-        {/* About Section */}
-        <View style={[styles.section, styles.darkerBg]}>
-          <Text style={styles.sectionTitle}>About Sameer Library</Text>
-          <Text style={styles.aboutText}>
-            Our mission is to provide students, researchers, and professional aspirants in Lucknow with a highly focused, peaceful, and fully-equipped study environment.
+        {/* Footer CTA */}
+        <View style={styles.footerCta}>
+          <Text style={styles.footerCtaTitle}>Ready for Focused Learning?</Text>
+          <Text style={styles.footerCtaSubtitle}>
+            Reserve your personal quiet space today and boost your productivity.
           </Text>
-          <Text style={styles.aboutText}>
-            Equipped with ergonomic seating, silent zones, high-speed Wi-Fi, and biometric access tracking, we ensure your preparation times are comfortable and productive.
-          </Text>
-        </View>
-
-        {/* Footer */}
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>© 2026 Sameer Library. All rights reserved.</Text>
-          <Text style={styles.footerSubText}>Designed for Academic Excellence.</Text>
+          <TouchableOpacity 
+            style={styles.primaryButton}
+            activeOpacity={0.85}
+            onPress={() => onNavigate(user ? 'StudentDashboard' : 'Register')}
+          >
+            <Text style={styles.primaryButtonText}>Get Started</Text>
+            <Ionicons name="arrow-forward" size={18} color="#ffffff" />
+          </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* Bottom Navigation Bar */}
+      <BottomNavBar activeTab={activeBottomTab} onTabPress={handleBottomTabPress} />
     </View>
   );
 };
@@ -300,191 +396,373 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0a0a0a', // var(--background) Dark Mode
+    backgroundColor: COLORS.background,
   },
   scrollContent: {
-    paddingBottom: 40,
+    paddingBottom: 90,
   },
   heroSection: {
-    paddingTop: 30,
     paddingHorizontal: 20,
-    paddingBottom: 40,
+    paddingTop: 28,
+    paddingBottom: 20,
+  },
+  liveBadge: {
+    flexDirection: 'row',
     alignItems: 'center',
-    textAlign: 'center',
-  },
-  lucknowBadge: {
-    backgroundColor: 'rgba(245, 158, 11, 0.1)', // Amber border capsule
-    borderColor: '#f59e0b',
-    borderWidth: 1,
-    borderRadius: 20,
+    alignSelf: 'flex-start',
+    backgroundColor: COLORS.surfaceContainerLow,
+    paddingHorizontal: 12,
     paddingVertical: 6,
-    paddingHorizontal: 16,
-    marginBottom: 20,
+    borderRadius: 20,
+    marginBottom: 16,
   },
-  lucknowBadgeText: {
-    color: '#f59e0b',
-    fontSize: 14,
-    fontWeight: '600',
+  liveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: COLORS.primary,
+    marginRight: 8,
+  },
+  liveBadgeText: {
+    color: COLORS.primary,
+    fontSize: 13,
+    fontWeight: '700',
   },
   heroTitle: {
-    fontSize: 36,
+    fontSize: 28,
     fontWeight: '800',
-    color: '#ffffff',
-    textAlign: 'center',
-    lineHeight: 44,
-    letterSpacing: -1,
+    color: COLORS.text,
+    lineHeight: 36,
+    letterSpacing: -0.5,
+    marginBottom: 12,
   },
   heroTitleTeal: {
-    color: '#0d9488', // var(--primary) Teal
+    color: COLORS.primary,
   },
   heroDescription: {
-    fontSize: 15,
-    color: '#a3a3a3', // var(--text-secondary)
-    textAlign: 'center',
-    lineHeight: 22,
-    marginTop: 16,
-    paddingHorizontal: 10,
+    fontSize: 16,
+    lineHeight: 24,
+    color: COLORS.textSecondary,
+    marginBottom: 24,
   },
   heroButtonsContainer: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     gap: 12,
-    marginTop: 28,
-    width: '100%',
-    justifyContent: 'center',
   },
   primaryButton: {
-    backgroundColor: '#0d9488',
+    backgroundColor: COLORS.primary,
     paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    ...Platform.select({
+      ios: {
+        shadowColor: COLORS.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.25,
+        shadowRadius: 10,
+      },
+      android: {
+        elevation: 4,
+      },
+      web: {
+        boxShadow: '0px 4px 20px rgba(0, 104, 91, 0.2)',
+      },
+    }),
+  },
+  primaryButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  secondaryButton: {
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.outlineVariant,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryButtonText: {
+    color: COLORS.primary,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  quickActionsGrid: {
+    flexDirection: 'row',
+    gap: 12,
     paddingHorizontal: 20,
-    borderRadius: 10,
+    marginVertical: 12,
+  },
+  quickActionCard: {
+    flex: 1,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.outlineVariant,
+    borderRadius: 18,
+    padding: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.03,
+        shadowRadius: 6,
+      },
+      android: {
+        elevation: 1,
+      },
+      web: {
+        boxShadow: '0px 4px 20px rgba(0, 0, 0, 0.04)',
+      },
+    }),
+  },
+  quickActionIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLORS.secondaryContainer,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickActionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  sectionContainer: {
+    paddingHorizontal: 20,
+    marginTop: 20,
+    gap: 14,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  sectionHeaderTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: COLORS.text,
+  },
+  viewAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  viewAllText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  spaceCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 18,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.04,
+        shadowRadius: 10,
+      },
+      android: {
+        elevation: 2,
+      },
+      web: {
+        boxShadow: '0px 4px 20px rgba(0,0,0,0.04)',
+      },
+    }),
+  },
+  spaceImageContainer: {
+    width: '100%',
+    height: 160,
+    position: 'relative',
+  },
+  spaceImage: {
+    width: '100%',
+    height: '100%',
+  },
+  ratingBadge: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
+  },
+  ratingText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  spaceCardBody: {
+    padding: 16,
+    gap: 6,
+  },
+  spaceName: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  spaceLocationRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
   },
-  primaryButtonText: {
-    color: '#ffffff',
-    fontWeight: '600',
-    fontSize: 15,
+  spaceLocationText: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
   },
-  secondaryButton: {
-    backgroundColor: '#171717',
-    borderColor: '#262626',
-    borderWidth: 1,
-    paddingVertical: 14,
+  spaceFooterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.borderLight,
+  },
+  seatPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 104, 91, 0.1)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+    gap: 6,
+  },
+  seatPillDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: COLORS.primary,
+  },
+  seatPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  amenityItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  amenityText: {
+    fontSize: 13,
+    color: COLORS.outline,
+    fontWeight: '500',
+  },
+  previewSection: {
     paddingHorizontal: 20,
-    borderRadius: 10,
+    marginTop: 28,
   },
-  secondaryButtonText: {
-    color: '#ffffff',
-    fontWeight: '600',
-    fontSize: 15,
-  },
-  previewContainer: {
-    position: 'relative',
-    marginHorizontal: 20,
-    marginBottom: 40,
-  },
-  previewCard: {
-    backgroundColor: '#171717', // var(--surface)
-    borderWidth: 1,
-    borderColor: '#262626',
-    borderRadius: 16,
-    padding: 20,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    elevation: 5,
-  },
-  previewHeader: {
+  previewHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
-  },
-  previewTitle: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  availableBadge: {
-    backgroundColor: 'rgba(13, 148, 136, 0.1)',
-    borderRadius: 8,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-  },
-  availableBadgeText: {
-    color: '#0d9488',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  pickerPlaceholder: {
     marginBottom: 12,
   },
-  pickerLabel: {
-    color: '#a3a3a3',
+  previewTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: COLORS.text,
+  },
+  previewSubtitle: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  liveAvailableBadge: {
+    backgroundColor: COLORS.secondaryContainer,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  liveAvailableText: {
     fontSize: 12,
-    fontWeight: '600',
-    marginBottom: 6,
-    textTransform: 'uppercase',
+    fontWeight: '700',
+    color: COLORS.onSecondaryContainer,
   },
-  pickerBox: {
-    backgroundColor: '#262626',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-  },
-  pickerBoxText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  seatGridContainer: {
-    marginTop: 12,
-    marginBottom: 16,
+  seatGridBox: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.04,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 2,
+      },
+      web: {
+        boxShadow: '0px 4px 20px rgba(0,0,0,0.04)',
+      },
+    }),
   },
   seatGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
     justifyContent: 'space-between',
-    marginTop: 6,
+    gap: 10,
+    marginVertical: 8,
   },
-  seatCell: {
-    width: (width - 100) / 5, // Responsive 5-column layout
-    height: 40,
-    borderColor: '#0d9488',
-    borderWidth: 1.5,
-    borderRadius: 6,
+  seatButton: {
+    width: (width - 40 - 32 - 30) / 4,
+    height: 48,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORS.outlineVariant,
+    backgroundColor: COLORS.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  seatBooked: {
-    borderColor: '#ef4444',
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+  seatButtonBooked: {
+    backgroundColor: COLORS.surfaceContainerHigh,
+    borderColor: COLORS.surfaceContainerHighest,
   },
-  seatSelected: {
-    backgroundColor: '#0d9488',
-    borderColor: '#0d9488',
+  seatButtonSelected: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
   },
-  seatCellText: {
-    color: '#0d9488',
-    fontSize: 12,
+  seatButtonText: {
+    fontSize: 13,
     fontWeight: '700',
+    color: COLORS.text,
   },
-  seatTextBooked: {
-    color: '#ef4444',
-  },
-  seatTextSelected: {
+  seatButtonTextSelected: {
     color: '#ffffff',
   },
   legendRow: {
     flexDirection: 'row',
-    gap: 16,
     justifyContent: 'center',
+    gap: 18,
+    marginTop: 14,
+    paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: '#262626',
-    paddingTop: 14,
+    borderTopColor: COLORS.borderLight,
   },
   legendItem: {
     flexDirection: 'row',
@@ -497,160 +775,101 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   legendAvailable: {
-    borderWidth: 1.5,
-    borderColor: '#0d9488',
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.outlineVariant,
   },
   legendSelected: {
-    backgroundColor: '#0d9488',
+    backgroundColor: COLORS.primary,
   },
   legendBooked: {
-    backgroundColor: '#ef4444',
+    backgroundColor: COLORS.surfaceContainerHigh,
   },
-  legendLabelText: {
-    color: '#a3a3a3',
+  legendLabel: {
     fontSize: 12,
+    color: COLORS.textSecondary,
+    fontWeight: '500',
   },
-  priceBadge: {
-    position: 'absolute',
-    bottom: -15,
-    right: 15,
-    backgroundColor: '#f59e0b', // var(--accent) Amber
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    shadowColor: '#f59e0b',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 4,
-  },
-  priceBadgeText: {
-    color: '#ffffff',
-    fontWeight: '700',
-    fontSize: 13,
-  },
-  statsSection: {
+  selectedSeatBanner: {
+    marginTop: 14,
+    padding: 12,
+    backgroundColor: COLORS.surfaceContainerLow,
+    borderRadius: 12,
     flexDirection: 'row',
-    backgroundColor: '#171717',
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: '#262626',
-    paddingVertical: 20,
-    marginVertical: 10,
-    justifyContent: 'space-around',
-  },
-  statBox: {
     alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  statValue: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#0d9488',
-  },
-  statLabel: {
-    fontSize: 12,
-    color: '#a3a3a3',
-    marginTop: 4,
-  },
-  section: {
-    paddingVertical: 40,
-    paddingHorizontal: 20,
-  },
-  sectionHeader: {
-    alignItems: 'center',
-    marginBottom: 30,
-  },
-  sectionBadge: {
-    backgroundColor: 'rgba(59, 130, 246, 0.1)',
-    borderColor: '#3b82f6',
-    borderWidth: 1,
-    borderRadius: 20,
-    paddingVertical: 4,
-    paddingHorizontal: 12,
-    marginBottom: 12,
-  },
-  sectionBadgeText: {
-    color: '#3b82f6',
-    fontSize: 12,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-  },
-  sectionTitle: {
-    fontSize: 26,
-    fontWeight: '700',
-    color: '#ffffff',
-    textAlign: 'center',
-    lineHeight: 32,
-    marginBottom: 10,
-  },
-  sectionSubtitle: {
+  selectedSeatTitle: {
     fontSize: 14,
-    color: '#a3a3a3',
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  selectedSeatSubtitle: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+  },
+  confirmSelectionBtn: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  confirmSelectionText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    marginTop: 24,
+    gap: 8,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: COLORS.surface,
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  statNumber: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: COLORS.primary,
+  },
+  statCaption: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  footerCta: {
+    marginHorizontal: 20,
+    marginTop: 28,
+    padding: 24,
+    backgroundColor: COLORS.surface,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+    textAlign: 'center',
+    gap: 12,
+  },
+  footerCtaTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: COLORS.text,
+    textAlign: 'center',
+  },
+  footerCtaSubtitle: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
     textAlign: 'center',
     lineHeight: 20,
-    maxWidth: '90%',
-  },
-  featureList: {
-    gap: 20,
-  },
-  featureCard: {
-    flexDirection: 'row',
-    backgroundColor: '#171717',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#262626',
-    padding: 16,
-    gap: 16,
-  },
-  featureIconContainer: {
-    width: 48,
-    height: 48,
-    backgroundColor: 'rgba(13, 148, 136, 0.1)',
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  featureContent: {
-    flex: 1,
-  },
-  featureTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#ffffff',
-    marginBottom: 4,
-  },
-  featureDesc: {
-    fontSize: 13,
-    color: '#a3a3a3',
-    lineHeight: 18,
-  },
-  darkerBg: {
-    backgroundColor: '#171717',
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: '#262626',
-  },
-  aboutText: {
-    fontSize: 14,
-    color: '#a3a3a3',
-    lineHeight: 22,
-    marginBottom: 12,
-  },
-  footer: {
-    paddingVertical: 30,
-    alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: '#262626',
-    marginTop: 20,
-  },
-  footerText: {
-    color: '#525252',
-    fontSize: 12,
-  },
-  footerSubText: {
-    color: '#525252',
-    fontSize: 11,
-    marginTop: 4,
   },
 });
+
 export default HomeScreen;

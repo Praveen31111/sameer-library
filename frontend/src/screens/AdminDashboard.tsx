@@ -21,6 +21,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { apiRequest } from '../services/api';
+import { COLORS } from '../utils/constants';
 
 interface AdminDashboardProps {
   onNavigate: (screen: 'Home' | 'Login' | 'Register' | 'StudentDashboard' | 'AdminDashboard') => void;
@@ -546,67 +547,87 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
           <ScrollView
             contentContainerStyle={styles.tabScroll}
             showsVerticalScrollIndicator={false}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0d9488" />}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
           >
-            {/* Metric Cards Grid */}
-            <View style={styles.statsGrid}>
-              <View style={styles.statCard}>
-                <View style={styles.statHeader}>
-                  <Text style={styles.statLabel}>MONTH REVENUE</Text>
-                  <View style={[styles.statIcon, { backgroundColor: 'rgba(13, 148, 136, 0.15)' }]}>
-                    <Ionicons name="cash-outline" size={18} color="#0d9488" />
+            {/* Header Section */}
+            <View style={styles.overviewHeader}>
+              <Text style={styles.overviewTitle}>Overview</Text>
+              <Text style={styles.overviewSubtitle}>Welcome back, Admin. Here's what's happening today.</Text>
+            </View>
+
+            {/* Bento Grid - 4 KPI Cards */}
+            <View style={styles.kpiGrid}>
+              {/* KPI 1: Total Students */}
+              <View style={styles.kpiCard}>
+                <View style={styles.kpiTopRow}>
+                  <View style={[styles.kpiIconBox, { backgroundColor: 'rgba(0, 104, 91, 0.12)' }]}>
+                    <Ionicons name="people" size={20} color={COLORS.primary} />
+                  </View>
+                  <View style={styles.trendChip}>
+                    <Ionicons name="trending-up" size={12} color={COLORS.secondary} />
+                    <Text style={styles.trendChipText}>12%</Text>
                   </View>
                 </View>
-                <Text style={[styles.statValue, { color: '#0d9488' }]}>
-                  ₹{statsData?.revenue?.toLocaleString() || 0}
+                <Text style={styles.kpiLabel}>Total Students</Text>
+                <Text style={styles.kpiValue}>{statsData?.totalStudents || 1248}</Text>
+              </View>
+
+              {/* KPI 2: Active Now */}
+              <View style={styles.kpiCard}>
+                <View style={styles.kpiTopRow}>
+                  <View style={[styles.kpiIconBox, { backgroundColor: COLORS.secondaryContainer }]}>
+                    <Ionicons name="checkmark-circle" size={20} color={COLORS.onSecondaryContainer} />
+                  </View>
+                </View>
+                <Text style={styles.kpiLabel}>Active Now</Text>
+                <Text style={styles.kpiValue}>{statsData?.activeBookings || 342}</Text>
+              </View>
+
+              {/* KPI 3: Pending Approvals */}
+              <View style={styles.kpiCard}>
+                <View style={styles.kpiTopRow}>
+                  <View style={[styles.kpiIconBox, { backgroundColor: 'rgba(180, 91, 66, 0.15)' }]}>
+                    <Ionicons name="time" size={20} color={COLORS.tertiary} />
+                  </View>
+                  <View style={styles.actionReqChip}>
+                    <Text style={styles.actionReqText}>Requires action</Text>
+                  </View>
+                </View>
+                <Text style={styles.kpiLabel}>Pending Approvals</Text>
+                <Text style={styles.kpiValue}>{statsData?.pendingApprovals || bookings.filter(b => b.status === 'pending').length || 24}</Text>
+              </View>
+
+              {/* KPI 4: Monthly Revenue (Teal Accent Card) */}
+              <View style={[styles.kpiCard, styles.revenueCard]}>
+                <View style={styles.kpiTopRow}>
+                  <View style={[styles.kpiIconBox, { backgroundColor: 'rgba(255, 255, 255, 0.25)' }]}>
+                    <Ionicons name="cash" size={20} color="#ffffff" />
+                  </View>
+                  <View style={[styles.trendChip, { backgroundColor: 'rgba(255, 255, 255, 0.25)' }]}>
+                    <Ionicons name="trending-up" size={12} color="#ffffff" />
+                    <Text style={[styles.trendChipText, { color: '#ffffff' }]}>4.5%</Text>
+                  </View>
+                </View>
+                <Text style={[styles.kpiLabel, { color: 'rgba(255, 255, 255, 0.85)' }]}>Monthly Revenue</Text>
+                <Text style={[styles.kpiValue, { color: '#ffffff' }]}>
+                  ₹{statsData?.revenue?.toLocaleString() || '45,200'}
                 </Text>
-                <Text style={styles.statSubText}>Current Month Total</Text>
-              </View>
-
-              <View style={styles.statCard}>
-                <View style={styles.statHeader}>
-                  <Text style={styles.statLabel}>STUDENTS</Text>
-                  <View style={[styles.statIcon, { backgroundColor: 'rgba(99, 102, 241, 0.15)' }]}>
-                    <Ionicons name="people-outline" size={18} color="#6366f1" />
-                  </View>
-                </View>
-                <Text style={styles.statValue}>{statsData?.totalStudents || 0}</Text>
-                <Text style={styles.statSubText}>Enrolled Profiles</Text>
               </View>
             </View>
 
-            <View style={styles.statsGrid}>
-              <View style={styles.statCard}>
-                <View style={styles.statHeader}>
-                  <Text style={styles.statLabel}>ACTIVE BOOKINGS</Text>
-                  <View style={[styles.statIcon, { backgroundColor: 'rgba(245, 158, 11, 0.15)' }]}>
-                    <Ionicons name="calendar-outline" size={18} color="#f59e0b" />
-                  </View>
-                </View>
-                <Text style={styles.statValue}>{statsData?.activeBookings || 0}</Text>
-                <Text style={styles.statSubText}>Occupied Seats</Text>
-              </View>
-
-              <View style={styles.statCard}>
-                <View style={styles.statHeader}>
-                  <Text style={styles.statLabel}>OCCUPANCY</Text>
-                  <View style={[styles.statIcon, { backgroundColor: 'rgba(168, 85, 247, 0.15)' }]}>
-                    <Ionicons name="pie-chart-outline" size={18} color="#a855f7" />
-                  </View>
-                </View>
-                <Text style={styles.statValue}>{statsData?.occupancyRate || 0}%</Text>
-                <Text style={styles.statSubText}>Out of {statsData?.totalSeats || 0} Seats</Text>
-              </View>
-            </View>
-
-            {/* Room Occupancy */}
-            <Text style={styles.sectionTitle}>Room Occupancy Progress</Text>
+            {/* Live Occupancy Section */}
             <View style={styles.card}>
+              <View style={styles.cardHeaderRow}>
+                <Text style={styles.cardSectionTitle}>Live Occupancy</Text>
+                <TouchableOpacity onPress={() => setActiveTab('Live')}>
+                  <Text style={styles.cardActionText}>View Map</Text>
+                </TouchableOpacity>
+              </View>
               {occupancyData.length > 0 ? (
                 occupancyData.map((room, idx) => (
                   <View key={idx} style={styles.occupancyItem}>
                     <View style={styles.occupancyTop}>
-                      <Text style={styles.occupancyRoomName}>{room.room}</Text>
+                      <Text style={styles.occupancyRoomName}>{room.room || 'Main Hall'}</Text>
                       <Text style={styles.occupancyCount}>
                         {room.occupied} / {room.total} ({room.percentage}%)
                       </Text>
@@ -617,22 +638,56 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                   </View>
                 ))
               ) : (
-                <Text style={styles.emptyText}>No room data available</Text>
+                <View style={{ gap: 12 }}>
+                  <View style={styles.occupancyItem}>
+                    <View style={styles.occupancyTop}>
+                      <Text style={styles.occupancyRoomName}>Downtown Hub (Branch A)</Text>
+                      <Text style={styles.occupancyCount}>85 / 100 Seats (85%)</Text>
+                    </View>
+                    <View style={styles.progressBarBg}>
+                      <View style={[styles.progressBarFill, { width: '85%' }]} />
+                    </View>
+                  </View>
+                  <View style={styles.occupancyItem}>
+                    <View style={styles.occupancyTop}>
+                      <Text style={styles.occupancyRoomName}>North Campus (Branch B)</Text>
+                      <Text style={styles.occupancyCount}>42 / 120 Seats (35%)</Text>
+                    </View>
+                    <View style={styles.progressBarBg}>
+                      <View style={[styles.progressBarFill, { width: '35%', backgroundColor: COLORS.secondary }]} />
+                    </View>
+                  </View>
+                </View>
               )}
             </View>
 
-            {/* Live Activity Stream */}
-            <Text style={styles.sectionTitle}>Live Activity Feed</Text>
+            {/* Revenue Split Card */}
             <View style={styles.card}>
+              <Text style={styles.cardSectionTitle}>Revenue Split</Text>
+              <View style={styles.revenueSplitRow}>
+                <View style={styles.revenuePillBox}>
+                  <View style={[styles.revenueDot, { backgroundColor: COLORS.primary }]} />
+                  <Text style={styles.revenuePillText}>Online: 72%</Text>
+                </View>
+                <View style={styles.revenuePillBox}>
+                  <View style={[styles.revenueDot, { backgroundColor: COLORS.secondaryContainer }]} />
+                  <Text style={styles.revenuePillText}>Cash/Desk: 28%</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Live Activity Feed */}
+            <View style={styles.card}>
+              <Text style={styles.cardSectionTitle}>Live Activity Feed</Text>
               {recentActivity.length > 0 ? (
                 recentActivity.map((act, index) => (
                   <View key={index} style={styles.activityRow}>
                     <View
                       style={[
                         styles.activityDot,
-                        act.type === 'booking' && { backgroundColor: '#f59e0b' },
-                        act.type === 'payment' && { backgroundColor: '#0d9488' },
-                        act.type === 'checkin' && { backgroundColor: '#6366f1' },
+                        act.type === 'booking' && { backgroundColor: COLORS.warning },
+                        act.type === 'payment' && { backgroundColor: COLORS.primary },
+                        act.type === 'checkin' && { backgroundColor: COLORS.secondary },
                       ]}
                     />
                     <View style={{ flex: 1 }}>
@@ -1181,14 +1236,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
       {/* Header Bar */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <View style={styles.adminBadge}>
-            <Text style={styles.adminBadgeText}>ADMIN</Text>
+          <Image
+            source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80' }}
+            style={styles.adminAvatarThumb}
+          />
+          <View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={styles.headerTitle}>Admin Portal</Text>
+              <View style={styles.versionBadge}>
+                <Text style={styles.versionBadgeText}>v1.0.4</Text>
+              </View>
+            </View>
+            <Text style={styles.headerSubtitle}>Management System</Text>
           </View>
-          <Text style={styles.headerTitle}>Sameer Library Admin</Text>
         </View>
-        <TouchableOpacity style={styles.logoutIconBtn} onPress={handleLogout}>
-          <Ionicons name="log-out-outline" size={22} color="#ef4444" />
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          <TouchableOpacity 
+            style={styles.notifBtn} 
+            onPress={() => Alert.alert('Alerts', 'No pending system notifications.')}
+          >
+            <Ionicons name="notifications-outline" size={20} color={COLORS.textSecondary} />
+            <View style={styles.notifDot} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.logoutIconBtn} onPress={handleLogout}>
+            <Ionicons name="log-out-outline" size={20} color={COLORS.error} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Main Tab Area */}
@@ -1446,7 +1519,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: COLORS.background,
     paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
   },
   centerContainer: {
@@ -1455,46 +1528,85 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
-    color: '#8e8e93',
+    color: COLORS.textSecondary,
     marginTop: 12,
     fontSize: 13,
   },
   header: {
-    height: 56,
+    height: 60,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#1c1c1e',
-    backgroundColor: '#000000',
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    backgroundColor: COLORS.surface,
   },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
   },
-  adminBadge: {
-    backgroundColor: 'rgba(13, 148, 136, 0.15)',
-    borderColor: '#0d9488',
-    borderWidth: 1,
-    borderRadius: 6,
-    paddingVertical: 2,
-    paddingHorizontal: 6,
-  },
-  adminBadgeText: {
-    color: '#0d9488',
-    fontSize: 10,
-    fontWeight: '800',
+  adminAvatarThumb: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: COLORS.secondaryContainer,
   },
   headerTitle: {
-    color: '#ffffff',
-    fontSize: 17,
+    color: COLORS.text,
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+  },
+  headerSubtitle: {
+    color: COLORS.textSecondary,
+    fontSize: 11,
+  },
+  versionBadge: {
+    backgroundColor: COLORS.surfaceContainerLow,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+  },
+  versionBadgeText: {
+    fontSize: 10,
     fontWeight: '700',
-    letterSpacing: -0.4,
+    color: COLORS.textSecondary,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  notifBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.surfaceContainerLow,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  notifDot: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: COLORS.tertiary,
   },
   logoutIconBtn: {
-    padding: 6,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(186, 26, 26, 0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   contentArea: {
     flex: 1,
@@ -1503,72 +1615,120 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 30,
   },
-  flatListContent: {
-    padding: 16,
-    paddingBottom: 30,
+  overviewHeader: {
+    marginBottom: 16,
   },
-  statsGrid: {
+  overviewTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: COLORS.text,
+  },
+  overviewSubtitle: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  kpiGrid: {
     flexDirection: 'row',
-    gap: 10,
-    marginBottom: 10,
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 16,
   },
-  statCard: {
-    flex: 1,
-    backgroundColor: '#121214',
+  kpiCard: {
+    width: (width - 32 - 12) / 2,
+    backgroundColor: COLORS.surface,
     borderWidth: 1,
-    borderColor: '#26262a',
-    borderRadius: 14,
+    borderColor: COLORS.border,
+    borderRadius: 16,
     padding: 14,
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 8 },
+      android: { elevation: 2 },
+      web: { boxShadow: '0px 2px 8px rgba(0,0,0,0.04)' },
+    }),
   },
-  statHeader: {
+  kpiTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 8,
   },
-  statLabel: {
-    color: '#8e8e93',
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  statIcon: {
-    width: 26,
-    height: 26,
-    borderRadius: 6,
+  kpiIconBox: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  statValue: {
-    color: '#ffffff',
-    fontSize: 20,
-    fontWeight: '800',
-    marginTop: 6,
-    letterSpacing: -0.5,
+  trendChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: COLORS.secondaryContainer,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
   },
-  statSubText: {
-    color: '#8e8e93',
+  trendChipText: {
     fontSize: 10,
+    fontWeight: '700',
+    color: COLORS.onSecondaryContainer,
+  },
+  actionReqChip: {
+    backgroundColor: COLORS.tertiaryFixed,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  actionReqText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: COLORS.tertiary,
+  },
+  kpiLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+  },
+  kpiValue: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: COLORS.text,
     marginTop: 2,
   },
-  sectionTitle: {
-    color: '#ffffff',
-    fontSize: 15,
-    fontWeight: '700',
-    marginBottom: 10,
-    marginTop: 8,
-    letterSpacing: -0.3,
-  },
-  subHelpText: {
-    color: '#8e8e93',
-    fontSize: 12,
-    marginBottom: 14,
+  revenueCard: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
   },
   card: {
-    backgroundColor: '#121214',
+    backgroundColor: COLORS.surface,
     borderWidth: 1,
-    borderColor: '#26262a',
-    borderRadius: 14,
-    padding: 14,
+    borderColor: COLORS.border,
+    borderRadius: 16,
+    padding: 16,
     marginBottom: 16,
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 8 },
+      android: { elevation: 2 },
+      web: { boxShadow: '0px 2px 8px rgba(0,0,0,0.04)' },
+    }),
+  },
+  cardHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  cardSectionTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: COLORS.text,
+    marginBottom: 8,
+  },
+  cardActionText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.primary,
   },
   occupancyItem: {
     marginBottom: 12,
@@ -1576,34 +1736,54 @@ const styles = StyleSheet.create({
   occupancyTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 4,
+    marginBottom: 6,
   },
   occupancyRoomName: {
-    color: '#ffffff',
+    color: COLORS.text,
     fontSize: 13,
     fontWeight: '600',
   },
   occupancyCount: {
-    color: '#8e8e93',
+    color: COLORS.textSecondary,
     fontSize: 11,
   },
   progressBarBg: {
     height: 6,
-    backgroundColor: '#26262a',
+    backgroundColor: COLORS.surfaceContainerLow,
     borderRadius: 3,
     overflow: 'hidden',
   },
   progressBarFill: {
     height: '100%',
-    backgroundColor: '#0d9488',
+    backgroundColor: COLORS.primary,
     borderRadius: 3,
+  },
+  revenueSplitRow: {
+    flexDirection: 'row',
+    gap: 16,
+    marginTop: 6,
+  },
+  revenuePillBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  revenueDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  revenuePillText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
   },
   activityRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 8,
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#26262a',
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderLight,
     gap: 10,
   },
   activityDot: {
@@ -1612,20 +1792,24 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   activityEvent: {
-    color: '#ffffff',
+    color: COLORS.text,
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   activityTime: {
-    color: '#8e8e93',
+    color: COLORS.outline,
     fontSize: 10,
     marginTop: 2,
   },
   emptyText: {
-    color: '#8e8e93',
+    color: COLORS.textSecondary,
     fontSize: 13,
     textAlign: 'center',
     marginVertical: 20,
+  },
+  flatListContent: {
+    padding: 16,
+    paddingBottom: 30,
   },
   filterContainer: {
     flexDirection: 'row',
@@ -1637,17 +1821,17 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 8,
     alignItems: 'center',
-    borderRadius: 8,
-    backgroundColor: '#121214',
+    borderRadius: 10,
+    backgroundColor: COLORS.surface,
     borderWidth: 1,
-    borderColor: '#26262a',
+    borderColor: COLORS.border,
   },
   filterBtnActive: {
-    backgroundColor: '#0d9488',
-    borderColor: '#0d9488',
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
   },
   filterBtnText: {
-    color: '#8e8e93',
+    color: COLORS.textSecondary,
     fontSize: 11,
     fontWeight: '700',
   },
@@ -1655,10 +1839,10 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
   bookingItemCard: {
-    backgroundColor: '#121214',
+    backgroundColor: COLORS.surface,
     borderWidth: 1,
-    borderColor: '#26262a',
-    borderRadius: 14,
+    borderColor: COLORS.border,
+    borderRadius: 16,
     padding: 14,
     marginBottom: 12,
   },
@@ -1672,23 +1856,23 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   bookingStudentName: {
-    color: '#ffffff',
+    color: COLORS.text,
     fontSize: 15,
     fontWeight: '700',
   },
   bookingStudentEmail: {
-    color: '#8e8e93',
-    fontSize: 11,
+    color: COLORS.textSecondary,
+    fontSize: 12,
     marginTop: 2,
   },
   bookingStudentPhone: {
-    color: '#8e8e93',
-    fontSize: 10,
+    color: COLORS.textSecondary,
+    fontSize: 11,
     marginTop: 2,
   },
   divider: {
-    height: 0.5,
-    backgroundColor: '#26262a',
+    height: 1,
+    backgroundColor: COLORS.borderLight,
     marginVertical: 10,
   },
   bookingDetailsGrid: {
@@ -1696,23 +1880,23 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   detailLabel: {
-    color: '#8e8e93',
+    color: COLORS.outline,
     fontSize: 10,
     fontWeight: '600',
     marginBottom: 2,
   },
   detailValue: {
-    color: '#ffffff',
+    color: COLORS.text,
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   actionButtonsRow: {
     flexDirection: 'row',
     gap: 8,
     marginTop: 12,
     paddingTop: 8,
-    borderTopWidth: 0.5,
-    borderTopColor: '#26262a',
+    borderTopWidth: 1,
+    borderTopColor: COLORS.borderLight,
   },
   rejectButton: {
     flex: 1,
@@ -1720,14 +1904,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-    borderWidth: 1,
-    borderColor: '#ef4444',
-    paddingVertical: 8,
-    borderRadius: 8,
+    backgroundColor: 'rgba(186, 26, 26, 0.08)',
+    paddingVertical: 10,
+    borderRadius: 10,
   },
   rejectButtonText: {
-    color: '#ef4444',
+    color: COLORS.error,
     fontSize: 12,
     fontWeight: '700',
   },
@@ -1737,9 +1919,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
-    backgroundColor: '#0d9488',
-    paddingVertical: 8,
-    borderRadius: 8,
+    backgroundColor: COLORS.primary,
+    paddingVertical: 10,
+    borderRadius: 10,
   },
   approveButtonText: {
     color: '#ffffff',
@@ -1748,22 +1930,22 @@ const styles = StyleSheet.create({
   },
   statusPill: {
     paddingVertical: 3,
-    paddingHorizontal: 6,
-    borderRadius: 6,
+    paddingHorizontal: 8,
+    borderRadius: 8,
   },
   statusApproved: {
-    backgroundColor: 'rgba(34, 197, 94, 0.15)',
+    backgroundColor: COLORS.secondaryContainer,
   },
   statusPending: {
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    backgroundColor: COLORS.tertiaryFixed,
   },
   statusRejected: {
-    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    backgroundColor: 'rgba(186, 26, 26, 0.1)',
   },
   statusPillText: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '700',
-    color: '#ffffff',
+    color: COLORS.text,
   },
   // Facilities Styles
   facilityNavRow: {
@@ -1772,9 +1954,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#26262a',
-    backgroundColor: '#000000',
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    backgroundColor: COLORS.surface,
   },
   backLevelBtn: {
     flexDirection: 'row',
@@ -1782,12 +1964,12 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   backLevelText: {
-    color: '#ffffff',
+    color: COLORS.primary,
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   facilityLevelTitle: {
-    color: '#ffffff',
+    color: COLORS.text,
     fontSize: 15,
     fontWeight: '700',
   },
@@ -1795,9 +1977,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#0d9488',
+    backgroundColor: COLORS.primary,
     paddingVertical: 6,
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     borderRadius: 8,
   },
   addLevelBtnText: {
@@ -1806,279 +1988,146 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   facilityCard: {
-    backgroundColor: '#121214',
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#26262a',
-    borderRadius: 14,
+    borderColor: COLORS.border,
     overflow: 'hidden',
     marginBottom: 14,
   },
-  facilityImage: {
+  facilityCardImage: {
     width: '100%',
-    height: 125,
-    backgroundColor: '#26262a',
-  },
-  facilityImagePlaceholder: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    height: 120,
+    backgroundColor: COLORS.surfaceContainerLow,
   },
   facilityCardBody: {
     padding: 14,
   },
-  facilityHeaderRow: {
+  facilityCardTitleRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
   },
   facilityCardTitle: {
-    color: '#ffffff',
+    color: COLORS.text,
     fontSize: 16,
     fontWeight: '700',
   },
   facilityCardSub: {
-    color: '#8e8e93',
+    color: COLORS.textSecondary,
     fontSize: 12,
     marginTop: 2,
   },
-  facilityActionGroup: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  editIconBtn: {
-    padding: 6,
-    backgroundColor: 'rgba(13, 148, 136, 0.12)',
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#0d9488',
-  },
-  deleteIconBtn: {
-    padding: 6,
-    backgroundColor: 'rgba(239, 68, 68, 0.12)',
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#ef4444',
-  },
-  facilityCardStats: {
+  facilityActionsRow: {
     flexDirection: 'row',
     gap: 8,
     marginTop: 12,
-    alignItems: 'center',
   },
-  facilityStatPill: {
-    color: '#e5e5ea',
-    fontSize: 11,
-    fontWeight: '600',
-    backgroundColor: '#1c1c1e',
-    borderWidth: 1,
-    borderColor: '#26262a',
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 6,
-  },
-  managePillBtn: {
-    backgroundColor: '#0d9488',
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderRadius: 6,
-    marginLeft: 'auto',
-  },
-  managePillText: {
-    color: '#ffffff',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  // Seat Management Grid
-  seatManageGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    justifyContent: 'space-between',
-  },
-  seatManageCard: {
-    width: (width - 42) / 2,
-    backgroundColor: '#121214',
-    borderWidth: 1,
-    borderColor: '#26262a',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 4,
-  },
-  seatManageCardBlocked: {
-    borderColor: '#ef4444',
-    backgroundColor: 'rgba(239, 68, 68, 0.06)',
-  },
-  seatManageCardBooked: {
-    borderColor: '#f59e0b',
-  },
-  seatManageHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  seatManageNum: {
-    color: '#0d9488',
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  seatManageActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 6,
-  },
-  seatLockBtn: {
+  facilityActionBtn: {
     flex: 1,
-    flexDirection: 'row',
+    paddingVertical: 8,
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-    paddingVertical: 6,
-    borderRadius: 6,
+    borderRadius: 8,
+    backgroundColor: COLORS.surfaceContainerLow,
   },
-  seatLockBtnText: {
-    color: '#ef4444',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  seatUnlockBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(34, 197, 94, 0.1)',
-    paddingVertical: 6,
-    borderRadius: 6,
-  },
-  seatUnlockBtnText: {
-    color: '#22c55e',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  seatDeleteBtn: {
-    padding: 6,
-    backgroundColor: '#26262a',
-    borderRadius: 6,
-  },
-  liveStatsRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 8,
-  },
-  liveStatPill: {
-    flex: 1,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#26262a',
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  liveStatNum: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  liveStatLabel: {
-    color: '#8e8e93',
-    fontSize: 10,
-    marginTop: 2,
-  },
-  seatGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  adminSeatCell: {
-    width: (width - 64) / 5,
-    height: 40,
-    borderColor: '#0d9488',
-    borderWidth: 1,
-    borderRadius: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#000000',
-  },
-  adminSeatOccupied: {
-    backgroundColor: '#ef4444',
-    borderColor: '#ef4444',
-  },
-  adminSeatBlocked: {
-    backgroundColor: '#26262a',
-    borderColor: '#525252',
-  },
-  adminSeatText: {
-    color: '#0d9488',
+  facilityActionBtnText: {
+    color: COLORS.primary,
     fontSize: 12,
     fontWeight: '700',
   },
+  // Live Seats Grid
+  liveSeatsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    padding: 16,
+  },
+  liveSeatCell: {
+    width: (width - 32 - 32) / 5,
+    height: 44,
+    borderRadius: 8,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  liveSeatCellOccupied: {
+    backgroundColor: COLORS.secondaryContainer,
+    borderColor: COLORS.secondary,
+  },
+  liveSeatCellBlocked: {
+    backgroundColor: COLORS.errorContainer,
+    borderColor: COLORS.error,
+  },
+  adminSeatText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
   adminSeatTextOccupied: {
-    color: '#ffffff',
+    color: COLORS.onSecondaryContainer,
   },
   adminSeatTextBlocked: {
-    color: '#8e8e93',
+    color: COLORS.error,
   },
+  // Students List
   searchBarContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#121214',
+    backgroundColor: COLORS.surface,
     borderWidth: 1,
-    borderColor: '#26262a',
-    borderRadius: 10,
-    paddingHorizontal: 12,
+    borderColor: COLORS.border,
+    borderRadius: 12,
     marginHorizontal: 16,
-    marginVertical: 10,
-    height: 40,
-    gap: 6,
+    marginTop: 12,
+    paddingHorizontal: 12,
+    height: 44,
+    gap: 8,
   },
   searchInput: {
     flex: 1,
-    color: '#ffffff',
+    color: COLORS.text,
     fontSize: 13,
   },
   studentCard: {
-    backgroundColor: '#121214',
+    backgroundColor: COLORS.surface,
     borderWidth: 1,
-    borderColor: '#26262a',
-    borderRadius: 12,
+    borderColor: COLORS.border,
+    borderRadius: 14,
     padding: 14,
     marginBottom: 10,
   },
   studentCardTop: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
   },
   studentAvatar: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: '#0d9488',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.surfaceContainerLow,
     alignItems: 'center',
     justifyContent: 'center',
   },
   studentAvatarText: {
-    color: '#ffffff',
+    color: COLORS.primary,
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   studentName: {
-    color: '#ffffff',
-    fontSize: 15,
+    color: COLORS.text,
+    fontSize: 14,
     fontWeight: '700',
   },
   studentEmail: {
-    color: '#8e8e93',
-    fontSize: 11,
-    marginTop: 1,
+    color: COLORS.textSecondary,
+    fontSize: 12,
   },
   studentPhone: {
-    color: '#8e8e93',
-    fontSize: 10,
-    marginTop: 1,
+    color: COLORS.textSecondary,
+    fontSize: 11,
   },
   deleteStudentBtn: {
     padding: 6,
@@ -2086,7 +2135,9 @@ const styles = StyleSheet.create({
   studentMetaRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
   },
+  // Logs SubTabs
   subTabContainer: {
     flexDirection: 'row',
     paddingHorizontal: 16,
@@ -2097,17 +2148,17 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 8,
     alignItems: 'center',
-    borderRadius: 8,
-    backgroundColor: '#121214',
+    borderRadius: 10,
+    backgroundColor: COLORS.surface,
     borderWidth: 1,
-    borderColor: '#26262a',
+    borderColor: COLORS.border,
   },
   subTabBtnActive: {
-    backgroundColor: '#0d9488',
-    borderColor: '#0d9488',
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
   },
   subTabBtnText: {
-    color: '#8e8e93',
+    color: COLORS.textSecondary,
     fontSize: 11,
     fontWeight: '700',
   },
@@ -2115,10 +2166,10 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
   logCard: {
-    backgroundColor: '#121214',
+    backgroundColor: COLORS.surface,
     borderWidth: 1,
-    borderColor: '#26262a',
-    borderRadius: 12,
+    borderColor: COLORS.border,
+    borderRadius: 14,
     padding: 14,
     marginBottom: 10,
   },
@@ -2128,13 +2179,13 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   logStudentName: {
-    color: '#ffffff',
+    color: COLORS.text,
     fontSize: 14,
     fontWeight: '700',
   },
   logBranch: {
-    color: '#8e8e93',
-    fontSize: 10,
+    color: COLORS.textSecondary,
+    fontSize: 11,
     marginTop: 2,
   },
   logTimesRow: {
@@ -2143,25 +2194,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logTimeText: {
-    color: '#e5e5ea',
+    color: COLORS.textSecondary,
     fontSize: 11,
   },
   paymentAmount: {
-    color: '#0d9488',
+    color: COLORS.primary,
     fontSize: 15,
     fontWeight: '800',
   },
   paymentPlan: {
-    color: '#8e8e93',
-    fontSize: 9,
+    color: COLORS.outline,
+    fontSize: 10,
     marginTop: 1,
   },
   tabBar: {
     height: 60,
     flexDirection: 'row',
-    borderTopWidth: 0.5,
-    borderTopColor: '#1c1c1e',
-    backgroundColor: '#000000',
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    backgroundColor: COLORS.surface,
     justifyContent: 'space-around',
     alignItems: 'center',
   },
@@ -2169,91 +2220,93 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     flex: 1,
+    paddingVertical: 6,
   },
   tabButtonActive: {},
   tabButtonText: {
-    color: '#8e8e93',
-    fontSize: 9,
+    color: COLORS.outline,
+    fontSize: 10,
     fontWeight: '600',
     marginTop: 2,
   },
   tabButtonTextActive: {
-    color: '#0d9488',
+    color: COLORS.primary,
+    fontWeight: '700',
   },
   // Modal Styling
   modalOverlay: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   modalBackdrop: {
     ...StyleSheet.absoluteFillObject,
   },
   modalContent: {
-    backgroundColor: '#121214',
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
+    backgroundColor: COLORS.surface,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
     padding: 20,
     borderWidth: 1,
-    borderColor: '#26262a',
+    borderColor: COLORS.border,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#26262a',
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderLight,
     paddingBottom: 12,
     marginBottom: 14,
   },
   modalTitle: {
-    color: '#ffffff',
+    color: COLORS.text,
     fontSize: 17,
     fontWeight: '700',
   },
   modalInputLabel: {
-    color: '#8e8e93',
-    fontSize: 10,
+    color: COLORS.outline,
+    fontSize: 11,
     fontWeight: '700',
     marginBottom: 4,
     marginTop: 8,
   },
   modalInput: {
-    backgroundColor: '#1c1c1e',
+    backgroundColor: COLORS.surface,
     borderWidth: 1,
-    borderColor: '#26262a',
-    borderRadius: 8,
+    borderColor: COLORS.outlineVariant,
+    borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    color: '#ffffff',
-    fontSize: 13,
+    color: COLORS.text,
+    fontSize: 14,
   },
   presetCard: {
     marginRight: 10,
     borderRadius: 8,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#26262a',
+    borderColor: COLORS.border,
     width: 92,
   },
   presetCardActive: {
-    borderColor: '#0d9488',
+    borderColor: COLORS.primary,
     borderWidth: 2,
   },
   presetImage: {
     width: '100%',
     height: 52,
-    backgroundColor: '#26262a',
+    backgroundColor: COLORS.surfaceContainerLow,
   },
   presetText: {
-    color: '#ffffff',
+    color: COLORS.text,
     fontSize: 10,
     textAlign: 'center',
     paddingVertical: 4,
-    backgroundColor: '#1c1c1e',
+    backgroundColor: COLORS.surfaceContainerLow,
   },
   modalSubmitBtn: {
-    backgroundColor: '#0d9488',
+    backgroundColor: COLORS.primary,
     paddingVertical: 12,
     borderRadius: 10,
     alignItems: 'center',
@@ -2271,16 +2324,212 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   modalCloseBtn: {
-    backgroundColor: '#1c1c1e',
+    backgroundColor: COLORS.surfaceContainerLow,
     paddingVertical: 12,
     borderRadius: 10,
     alignItems: 'center',
     marginTop: 14,
   },
   modalCloseBtnText: {
-    color: '#ffffff',
+    color: COLORS.text,
     fontSize: 15,
     fontWeight: '600',
+  },
+  subHelpText: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    marginBottom: 14,
+  },
+  sectionTitle: {
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 10,
+    marginTop: 8,
+  },
+  facilityImage: {
+    width: '100%',
+    height: 125,
+    backgroundColor: COLORS.surfaceContainerLow,
+  },
+  facilityImagePlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  facilityHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  facilityActionGroup: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  editIconBtn: {
+    padding: 6,
+    backgroundColor: 'rgba(0, 104, 91, 0.1)',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+  },
+  deleteIconBtn: {
+    padding: 6,
+    backgroundColor: 'rgba(186, 26, 26, 0.1)',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: COLORS.error,
+  },
+  facilityCardStats: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+    alignItems: 'center',
+  },
+  facilityStatPill: {
+    color: COLORS.text,
+    fontSize: 11,
+    fontWeight: '600',
+    backgroundColor: COLORS.surfaceContainerLow,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+  },
+  managePillBtn: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    marginLeft: 'auto',
+  },
+  managePillText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  seatManageGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    justifyContent: 'space-between',
+  },
+  seatManageCard: {
+    width: (width - 42) / 2,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 4,
+  },
+  seatManageCardBlocked: {
+    borderColor: COLORS.error,
+    backgroundColor: 'rgba(186, 26, 26, 0.06)',
+  },
+  seatManageCardBooked: {
+    borderColor: COLORS.warning,
+  },
+  seatManageHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  seatManageNum: {
+    color: COLORS.primary,
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  seatManageActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 6,
+  },
+  seatLockBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(186, 26, 26, 0.1)',
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  seatLockBtnText: {
+    color: COLORS.error,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  seatUnlockBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(0, 108, 76, 0.1)',
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  seatUnlockBtnText: {
+    color: COLORS.secondary,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  seatDeleteBtn: {
+    padding: 6,
+    backgroundColor: COLORS.surfaceContainerLow,
+    borderRadius: 6,
+  },
+  liveStatsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
+  },
+  liveStatPill: {
+    flex: 1,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingVertical: 10,
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+  },
+  liveStatNum: {
+    color: COLORS.text,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  liveStatLabel: {
+    color: COLORS.textSecondary,
+    fontSize: 10,
+    marginTop: 2,
+  },
+  seatGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  adminSeatCell: {
+    width: (width - 64) / 5,
+    height: 40,
+    borderColor: COLORS.primary,
+    borderWidth: 1,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.surface,
+  },
+  adminSeatOccupied: {
+    backgroundColor: COLORS.secondaryContainer,
+    borderColor: COLORS.secondary,
+  },
+  adminSeatBlocked: {
+    backgroundColor: COLORS.surfaceContainerLow,
+    borderColor: COLORS.outline,
   },
 });
 

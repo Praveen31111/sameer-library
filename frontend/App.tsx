@@ -57,7 +57,7 @@ function AppContent() {
 
   return (
     <>
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
       {renderScreen()}
     </>
   );

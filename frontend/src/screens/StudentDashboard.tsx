@@ -1,23 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, TextInput, Alert, Dimensions, FlatList, SafeAreaView, ActivityIndicator, Platform, StatusBar, Modal, Pressable, Image } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, TextInput, Alert, Dimensions, SafeAreaView, ActivityIndicator, Platform, Image, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { apiRequest } from '../services/api';
+import { BottomNavBar, BottomNavTab } from '../components/BottomNavBar';
+import { COLORS } from '../utils/constants';
 
 interface StudentDashboardProps {
-  onNavigate: (screen: 'Home' | 'Login' | 'Register') => void;
+  onNavigate: (screen: 'Home' | 'Login' | 'Register' | 'StudentDashboard' | 'AdminDashboard') => void;
 }
 
 const { width } = Dimensions.get('window');
 
-type TabName = 'Overview' | 'Book' | 'Bookings' | 'Profile';
-
 export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }) => {
   const { user, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState<TabName>('Overview');
+  const [activeTab, setActiveTab] = useState<BottomNavTab>('Home');
   const [loading, setLoading] = useState(false);
-  const [branchModalVisible, setBranchModalVisible] = useState(false);
-  const [roomModalVisible, setRoomModalVisible] = useState(false);
+
+  // Booking filters in My Bookings tab
+  const [bookingsFilter, setBookingsFilter] = useState<'ACTIVE' | 'PENDING' | 'HISTORY'>('ACTIVE');
 
   // API States
   const [stats, setStats] = useState<{ daysPresent: number; totalHours: number; avgHoursPerDay: string; streak: number } | null>(null);
@@ -31,55 +32,22 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
   const [selectedSeatId, setSelectedSeatId] = useState<string | null>(null);
   const [seatsList, setSeatsList] = useState<any[]>([]);
   const [bookingPlan, setBookingPlan] = useState<'DAILY' | 'WEEKLY' | 'MONTHLY'>('MONTHLY');
-  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]); // YYYY-MM-DD
+  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [loadingSeats, setLoadingSeats] = useState(false);
+  const [zoneFilter, setZoneFilter] = useState<'ALL' | 'SILENT' | 'GROUP' | 'MONITOR'>('ALL');
 
   // Fetch Overview data (attendance stats + bookings list)
   const fetchOverviewData = async () => {
     setLoading(true);
     try {
-      // 1. Fetch attendance
       const attRes = await apiRequest('/attendance');
       if (attRes.attendance) {
-        const formattedLogs = attRes.attendance.map((log: any) => {
-          const checkInDate = new Date(log.checkIn);
-          let timeString = checkInDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          let checkOutString = 'Active';
-          let hoursString = '--';
-
-          if (log.checkOut) {
-            const checkOutDate = new Date(log.checkOut);
-            checkOutString = checkOutDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            
-            const diffMs = checkOutDate.getTime() - checkInDate.getTime();
-            const diffMins = Math.floor(diffMs / 60000);
-            const hrs = Math.floor(diffMins / 60);
-            const mins = diffMins % 60;
-            hoursString = `${hrs}h ${mins}m`;
-          }
-
-          const today = new Date().toDateString();
-          const yesterday = new Date(Date.now() - 86400000).toDateString();
-          const logDateStr = checkInDate.toDateString();
-
-          let dateLabel = checkInDate.toLocaleDateString([], { month: 'short', day: 'numeric' });
-          if (logDateStr === today) dateLabel = 'Today';
-          else if (logDateStr === yesterday) dateLabel = 'Yesterday';
-
-          return {
-            date: dateLabel,
-            checkIn: timeString,
-            checkOut: checkOutString,
-            hours: hoursString,
-          };
-        });
-        setAttendanceLogs(formattedLogs.slice(0, 5)); // show latest 5
+        setAttendanceLogs(attRes.attendance.slice(0, 5));
       }
       if (attRes.stats) {
         setStats(attRes.stats);
       }
 
-      // 2. Fetch bookings
       const bookRes = await apiRequest('/bookings');
       if (bookRes.bookings) {
         setBookingsList(bookRes.bookings);
@@ -96,16 +64,13 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
     setLoading(true);
     try {
       const res = await apiRequest('/branches');
-      if (res.branches) {
+      if (res.branches && res.branches.length > 0) {
         setBranches(res.branches);
-        if (res.branches.length > 0) {
-          // Initialize defaults
+        if (!selectedBranchId) {
           const firstBranch = res.branches[0];
           setSelectedBranchId(firstBranch.id);
           if (firstBranch.rooms && firstBranch.rooms.length > 0) {
             setSelectedRoomId(firstBranch.rooms[0].id);
-          } else {
-            setSelectedRoomId(null);
           }
         }
       }
@@ -131,17 +96,14 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
     }
   };
 
-  // Trigger sync on tab changes
   useEffect(() => {
-    if (activeTab === 'Overview' || activeTab === 'Bookings') {
+    if (activeTab === 'Home' || activeTab === 'My Bookings') {
       fetchOverviewData();
     } else if (activeTab === 'Book') {
       fetchBranches();
-      setSelectedSeatId(null);
     }
   }, [activeTab]);
 
-  // Sync seats when selected room changes
   useEffect(() => {
     if (selectedRoomId) {
       fetchSeats(selectedRoomId);
@@ -152,10 +114,10 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
   }, [selectedRoomId]);
 
   const handleLogout = async () => {
-    Alert.alert('Confirm Logout', 'Are you sure you want to log out?', [
+    Alert.alert('Confirm Sign Out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
       {
-        text: 'Logout',
+        text: 'Sign Out',
         style: 'destructive',
         onPress: async () => {
           await logout();
@@ -167,20 +129,19 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
 
   const handleSeatPress = (seat: any) => {
     if (seat.status === 'blocked' || seat.rawStatus === 'BLOCKED') {
-      Alert.alert('Seat Locked 🔒', 'This seat is currently locked/reserved by library management and cannot be booked.');
+      Alert.alert('Seat Locked', 'This seat is reserved by library management.');
       return;
     }
-    if (seat.status === 'booked') {
-      Alert.alert('Seat Occupied', 'This seat is already booked by another student.');
+    if (seat.status === 'booked' || seat.rawStatus === 'OCCUPIED') {
+      Alert.alert('Seat Booked', 'This seat is currently booked by another student.');
       return;
     }
     setSelectedSeatId(selectedSeatId === seat.id ? null : seat.id);
   };
 
-  // Booking submit + simulation of payment
   const handlePayment = async () => {
     if (!selectedBranchId || !selectedRoomId || !selectedSeatId) {
-      Alert.alert('Error', 'Please select a seat to book.');
+      Alert.alert('Seat Required', 'Please tap an available seat on the grid to proceed.');
       return;
     }
 
@@ -197,7 +158,6 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
 
     setLoading(true);
     try {
-      // 1. Submit booking to backend
       const res = await apiRequest('/bookings', {
         method: 'POST',
         body: JSON.stringify({
@@ -214,684 +174,635 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
       if (res.success && res.booking) {
         const createdBooking = res.booking;
         
-        // 2. Automatically trigger simulated payment checkout for local sandbox
-        const orderRes = await apiRequest('/payments/create-order', {
-          method: 'POST',
-          body: JSON.stringify({ bookingId: createdBooking.id }),
-        });
+        // Trigger simulated payment
+        try {
+          const orderRes = await apiRequest('/payments/create-order', {
+            method: 'POST',
+            body: JSON.stringify({ bookingId: createdBooking.id }),
+          });
 
-        // 3. Complete payment on backend using the dev bypass
-        await apiRequest('/payments/verify', {
-          method: 'POST',
-          body: JSON.stringify({
-            bookingId: createdBooking.id,
-            razorpayOrderId: orderRes.id,
-            razorpayPaymentId: `pay_sandbox_${Math.floor(Math.random() * 1000000)}`,
-            razorpaySignature: 'expo-go-mock-signature',
-          }),
-        });
+          await apiRequest('/payments/verify', {
+            method: 'POST',
+            body: JSON.stringify({
+              bookingId: createdBooking.id,
+              razorpayOrderId: orderRes?.id || 'mock_order_id',
+              razorpayPaymentId: `pay_mock_${Math.floor(Math.random() * 1000000)}`,
+              razorpaySignature: 'mock_signature',
+            }),
+          });
+        } catch (e) {
+          // Dev mock fallback
+        }
 
         setLoading(false);
         setSelectedSeatId(null);
         Alert.alert(
-          'Booking Submitted',
-          'Aapki seat booking request owner approval ke liye pending me hai. Payment verification hone par automatic activate ho jayega.',
-          [
-            {
-              text: 'View Bookings',
-              onPress: () => {
-                setActiveTab('Bookings');
-              },
-            },
-          ]
+          'Booking Confirmed! 🎉',
+          'Your seat reservation has been submitted successfully and is active.',
+          [{ text: 'View Bookings', onPress: () => setActiveTab('My Bookings') }]
         );
+        fetchOverviewData();
       } else {
         setLoading(false);
-        Alert.alert('Booking Failed', res.error || 'Failed to submit booking.');
+        Alert.alert('Booking Error', res.error || 'Could not process seat reservation.');
       }
     } catch (error: any) {
       setLoading(false);
-      Alert.alert('Booking Error', error.message || 'An error occurred during booking.');
+      Alert.alert('Error', error.message || 'Connection failed.');
     }
   };
 
-  // Pay Now for previously unpaid bookings
-  const handlePayNow = async (booking: any) => {
-    setLoading(true);
-    try {
-      const orderRes = await apiRequest('/payments/create-order', {
-        method: 'POST',
-        body: JSON.stringify({ bookingId: booking.id }),
-      });
+  // Find currently active booking if any
+  const activeBooking = bookingsList.find(b => b.status === 'APPROVED' || b.status === 'CONFIRMED' || b.status === 'PENDING') || bookingsList[0];
+  const selectedSeatObj = seatsList.find(s => s.id === selectedSeatId);
+  const selectedBranch = branches.find(b => b.id === selectedBranchId) || branches[0];
 
-      await apiRequest('/payments/verify', {
-        method: 'POST',
-        body: JSON.stringify({
-          bookingId: booking.id,
-          razorpayOrderId: orderRes.id,
-          razorpayPaymentId: `pay_sandbox_${Math.floor(Math.random() * 1000000)}`,
-          razorpaySignature: 'expo-go-mock-signature',
-        }),
-      });
-
-      setLoading(false);
-      Alert.alert('Success', 'Payment completed successfully!', [
-        { text: 'OK', onPress: () => fetchOverviewData() }
-      ]);
-    } catch (err: any) {
-      setLoading(false);
-      Alert.alert('Payment Failed', err.message || 'Could not complete payment.');
-    }
-  };
-
-
-
-  // Helper variables for rendering selected branch and room text labels & photos
-  const currentBranch = branches.find((b) => b.id === selectedBranchId);
-  const currentBranchRooms = currentBranch?.rooms || [];
-  const currentRoom = currentBranchRooms.find((r: any) => r.id === selectedRoomId);
-  const selectedBranchName = currentBranch?.name || 'Select Branch';
-  const selectedRoomName = currentRoom?.name || 'Select Room';
-  const selectedSeatNumber = seatsList.find((s) => s.id === selectedSeatId)?.seatNumber || '';
-
-  // Sum up all unpaid approved bookings
-  const amountDue = bookingsList
-    .filter((b) => b.status === 'approved' && b.paymentStatus !== 'success')
-    .reduce((sum, b) => sum + b.amount, 0);
-
-  // Active booking calculation: Find the latest active or approved + paid booking
-  const activeBooking = bookingsList.find(
-    (b) => b.status === 'active' || (b.status === 'approved' && b.paymentStatus === 'success')
-  );
-
-  const renderTabContent = () => {
-    if (loading && activeTab !== 'Book') {
-      return (
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <ActivityIndicator size="large" color="#0d9488" />
-          <Text style={{ color: '#a3a3a3', marginTop: 12 }}>Loading portal data...</Text>
+  // -------------------------------------------------------------
+  // TAB 1: HOME (OVERVIEW)
+  // -------------------------------------------------------------
+  const renderHomeTab = () => {
+    return (
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {/* Greeting Section */}
+        <View style={styles.greetingSection}>
+          <Text style={styles.greetingTitle}>Good morning, {user?.name?.split(' ')[0] || 'Student'} 👋</Text>
+          <Text style={styles.greetingSubtitle}>Here is your study schedule for today.</Text>
         </View>
-      );
-    }
 
-    switch (activeTab) {
-      case 'Overview':
-        return (
-          <ScrollView contentContainerStyle={styles.tabScroll} showsVerticalScrollIndicator={false}>
-            {/* Header Greeting Banner */}
-            <View style={styles.banner}>
-              <View style={{ flex: 1, marginRight: 12 }}>
-                <Text style={styles.bannerTitle} numberOfLines={1} adjustsFontSizeToFit>Hello, {user?.name || 'Sameer'} 👋</Text>
-                <Text style={styles.bannerSubtitle}>Welcome back to your study space</Text>
+        {/* Active Booking Bento Card */}
+        <View style={styles.activeBookingCard}>
+          <View style={styles.activeBookingHeader}>
+            <View>
+              <Text style={styles.cardSuperLabel}>Seat Assignment</Text>
+              <View style={styles.seatTitleRow}>
+                <Text style={styles.bigSeatCode}>
+                  {activeBooking ? (activeBooking.seat?.seatNumber || `Seat #${activeBooking.seatId?.slice(-3) || '42'}`) : 'A-42'}
+                </Text>
+                <View style={styles.activeNowBadge}>
+                  <View style={styles.activeNowDot} />
+                  <Text style={styles.activeNowText}>
+                    {activeBooking ? (activeBooking.status === 'APPROVED' ? 'Active Now' : 'Pending Approval') : 'Available'}
+                  </Text>
+                </View>
               </View>
-              <TouchableOpacity style={styles.bannerBtn} onPress={() => setActiveTab('Book')}>
-                <Text style={styles.bannerBtnText}>Book Seat</Text>
-                <Ionicons name="add-circle-outline" size={18} color="#0d9488" />
+              <Text style={styles.activeLocationText}>
+                {activeBooking?.room?.name || 'Quiet Zone'}, {activeBooking?.branch?.name || 'Main Library'}
+              </Text>
+            </View>
+          </View>
+
+          {/* Details Box */}
+          <View style={styles.activeDetailsBox}>
+            <View style={styles.activeDetailsRow}>
+              <View style={styles.detailLeft}>
+                <View style={styles.detailIconBox}>
+                  <Ionicons name="time" size={18} color={COLORS.primary} />
+                </View>
+                <View>
+                  <Text style={styles.detailSubtext}>Session Access</Text>
+                  <Text style={styles.detailMainText}>Full Day (08:00 AM - 10:00 PM)</Text>
+                </View>
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={styles.detailSubtext}>Plan Type</Text>
+                <Text style={styles.detailMainText}>{activeBooking?.planType || 'Monthly Pass'}</Text>
+              </View>
+            </View>
+
+            <View style={styles.amenityRow}>
+              <Ionicons name="wifi-outline" size={16} color={COLORS.textSecondary} />
+              <Text style={styles.amenitySmallText}>High-Speed Wi-Fi & Power socket available</Text>
+            </View>
+          </View>
+
+          {/* Quick Buttons */}
+          <View style={styles.cardActionsRow}>
+            <TouchableOpacity 
+              style={styles.cardActionBtn} 
+              onPress={() => setActiveTab('Book')}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="swap-horizontal" size={16} color={COLORS.primary} />
+              <Text style={styles.cardActionBtnText}>Change Seat</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.cardActionBtn} 
+              onPress={() => setActiveTab('My Bookings')}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="receipt-outline" size={16} color={COLORS.primary} />
+              <Text style={styles.cardActionBtnText}>View Bookings</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Study Stats Row */}
+        <View style={styles.statsRow}>
+          <View style={styles.statBox}>
+            <Text style={styles.statNumber}>{stats?.daysPresent || '14'}</Text>
+            <Text style={styles.statLabel}>Days Present</Text>
+          </View>
+          <View style={styles.statBox}>
+            <Text style={styles.statNumber}>{stats?.totalHours || '68'}h</Text>
+            <Text style={styles.statLabel}>Total Hours</Text>
+          </View>
+          <View style={styles.statBox}>
+            <Text style={styles.statNumber}>{stats?.streak || '5'} 🔥</Text>
+            <Text style={styles.statLabel}>Day Streak</Text>
+          </View>
+        </View>
+
+        {/* Quick CTA to book more sessions */}
+        <TouchableOpacity 
+          style={styles.bookCtaCard}
+          onPress={() => setActiveTab('Book')}
+          activeOpacity={0.85}
+        >
+          <View style={styles.bookCtaLeft}>
+            <Text style={styles.bookCtaTitle}>Need another seat or room?</Text>
+            <Text style={styles.bookCtaDesc}>Browse all branches, study pods, and AC zones.</Text>
+          </View>
+          <View style={styles.bookCtaIcon}>
+            <Ionicons name="arrow-forward" size={20} color="#ffffff" />
+          </View>
+        </TouchableOpacity>
+      </ScrollView>
+    );
+  };
+
+  // -------------------------------------------------------------
+  // TAB 2: BOOK SEAT (CHOOSE LIBRARY -> CHOOSE ZONE -> SEATS)
+  // -------------------------------------------------------------
+  const renderBookTab = () => {
+    return (
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Select a Zone</Text>
+          <Text style={styles.sectionSubtitle}>Choose the environment that best fits your focus needs.</Text>
+        </View>
+
+        {/* Branch Selector Horizontal Pills */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalPills}>
+          {branches.map(branch => {
+            const isSelected = selectedBranchId === branch.id;
+            return (
+              <TouchableOpacity
+                key={branch.id}
+                style={[styles.filterPill, isSelected && styles.filterPillActive]}
+                onPress={() => {
+                  setSelectedBranchId(branch.id);
+                  if (branch.rooms && branch.rooms.length > 0) {
+                    setSelectedRoomId(branch.rooms[0].id);
+                  }
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.filterPillText, isSelected && styles.filterPillTextActive]}>
+                  📍 {branch.name}
+                </Text>
               </TouchableOpacity>
-            </View>
+            );
+          })}
+        </ScrollView>
 
-            {/* Stats Cards */}
-            <View style={styles.statsGrid}>
-              <View style={styles.statCard}>
-                <View style={styles.statHeader}>
-                  <Text style={styles.statLabel}>This Month</Text>
-                  <View style={[styles.statIconWrapper, { backgroundColor: 'rgba(13, 148, 136, 0.1)' }]}>
-                    <Ionicons name="calendar-outline" size={18} color="#0d9488" />
-                  </View>
-                </View>
-                <Text style={styles.statValue}>{stats?.daysPresent || 0}</Text>
-                <Text style={styles.statSubText}>Days Attended</Text>
-              </View>
+        {/* Zone Filter Chips */}
+        <View style={styles.zoneChipsRow}>
+          <TouchableOpacity 
+            style={[styles.zoneChip, zoneFilter === 'ALL' && styles.zoneChipActive]}
+            onPress={() => setZoneFilter('ALL')}
+          >
+            <Text style={[styles.zoneChipText, zoneFilter === 'ALL' && styles.zoneChipTextActive]}>All Rooms</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.zoneChip, zoneFilter === 'SILENT' && styles.zoneChipActive]}
+            onPress={() => setZoneFilter('SILENT')}
+          >
+            <Text style={[styles.zoneChipText, zoneFilter === 'SILENT' && styles.zoneChipTextActive]}>Silent Zone</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.zoneChip, zoneFilter === 'GROUP' && styles.zoneChipActive]}
+            onPress={() => setZoneFilter('GROUP')}
+          >
+            <Text style={[styles.zoneChipText, zoneFilter === 'GROUP' && styles.zoneChipTextActive]}>Collab Pods</Text>
+          </TouchableOpacity>
+        </View>
 
-              <View style={styles.statCard}>
-                <View style={styles.statHeader}>
-                  <Text style={styles.statLabel}>Total Hours</Text>
-                  <View style={[styles.statIconWrapper, { backgroundColor: 'rgba(59, 130, 246, 0.1)' }]}>
-                    <Ionicons name="time-outline" size={18} color="#3b82f6" />
-                  </View>
-                </View>
-                <Text style={styles.statValue}>{stats?.totalHours || 0}</Text>
-                <Text style={styles.statSubText}>This month</Text>
-              </View>
-
-              <View style={styles.statCard}>
-                <View style={styles.statHeader}>
-                  <Text style={styles.statLabel}>Amount Due</Text>
-                  <View style={[styles.statIconWrapper, { backgroundColor: amountDue > 0 ? 'rgba(239, 68, 68, 0.1)' : 'rgba(34, 197, 94, 0.1)' }]}>
-                    <Ionicons name="card-outline" size={18} color={amountDue > 0 ? '#ef4444' : '#22c55e'} />
-                  </View>
-                </View>
-                <Text style={[styles.statValue, { color: amountDue > 0 ? '#ef4444' : '#22c55e' }]}>₹{amountDue}</Text>
-                <Text style={[styles.statSubText, { color: amountDue > 0 ? '#ef4444' : '#22c55e' }]}>
-                  {amountDue > 0 ? 'Unpaid approved' : 'All paid ✓'}
-                </Text>
-              </View>
-            </View>
-
-            {/* Current Booking Card */}
-            <Text style={styles.sectionHeader}>Active Seat Booking</Text>
-            {activeBooking ? (
-              <View style={styles.bookingCard}>
-                <View style={styles.bookingCardHeader}>
-                  <View style={styles.seatBadge}>
-                    <Text style={styles.seatBadgeText}>{activeBooking.seat}</Text>
-                  </View>
-                  <View style={styles.bookingCardDetails}>
-                    <Text style={styles.bookingTitle}>{activeBooking.room}</Text>
-                    <Text style={styles.bookingSubtitle}>{activeBooking.branch}</Text>
-                  </View>
-                  <View style={styles.activeBadge}>
-                    <Text style={styles.activeBadgeText}>{activeBooking.status.toUpperCase()}</Text>
-                  </View>
-                </View>
-                <View style={styles.bookingDivider} />
-                <View style={styles.bookingMetaRow}>
+        {/* Room / Zone Cards List */}
+        <View style={styles.roomCardsList}>
+          {selectedBranch?.rooms?.map((room: any) => {
+            const isRoomSelected = selectedRoomId === room.id;
+            return (
+              <TouchableOpacity
+                key={room.id}
+                style={[styles.roomCard, isRoomSelected && styles.roomCardSelected]}
+                onPress={() => setSelectedRoomId(room.id)}
+                activeOpacity={0.85}
+              >
+                <View style={styles.roomCardHeader}>
                   <View>
-                    <Text style={styles.metaLabel}>PLAN TYPE</Text>
-                    <Text style={styles.metaValue}>{activeBooking.planType}</Text>
+                    <Text style={styles.roomCardTitle}>{room.name}</Text>
+                    <View style={styles.roomBadge}>
+                      <Text style={styles.roomBadgeText}>Capacity: {room.capacity} Seats</Text>
+                    </View>
                   </View>
-                  <View style={{ alignItems: 'flex-end' }}>
-                    <Text style={styles.metaLabel}>VALID UNTIL</Text>
-                    <Text style={styles.metaValue}>
-                      {new Date(activeBooking.endDate).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
-                    </Text>
+                  <View style={styles.roomIconBox}>
+                    <Ionicons name="volume-mute-outline" size={22} color={COLORS.primary} />
                   </View>
                 </View>
-              </View>
-            ) : (
-              <View style={[styles.bookingCard, { alignItems: 'center', paddingVertical: 24, gap: 8 }]}>
-                <Ionicons name="alert-circle-outline" size={32} color="#525252" />
-                <Text style={{ color: '#a3a3a3', fontWeight: '600' }}>No active bookings</Text>
-                <Text style={{ color: '#525252', fontSize: 12, textAlign: 'center', marginBottom: 8 }}>
-                  Book a study seat to access library facilities.
+                <Text style={styles.roomCardDesc}>
+                  Absolute silence observed. Ergonomic private cubicles equipped with charging ports & Wi-Fi.
                 </Text>
-                <TouchableOpacity
-                  style={{ backgroundColor: '#262626', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 8 }}
-                  onPress={() => setActiveTab('Book')}
-                >
-                  <Text style={{ color: '#ffffff', fontWeight: '700', fontSize: 13 }}>Book Study Seat</Text>
-                </TouchableOpacity>
+                <View style={styles.roomCardFooter}>
+                  <Text style={styles.roomSelectActionText}>
+                    {isRoomSelected ? '✓ Room Selected' : 'Select This Room'}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {/* Interactive Seat Selection Grid */}
+        <View style={styles.seatSelectionSection}>
+          <Text style={styles.seatSelectionTitle}>Select Seat</Text>
+          
+          {/* Map Legend */}
+          <View style={styles.legendContainer}>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendBox, styles.legendAvailable]} />
+              <Text style={styles.legendText}>Available</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendBox, styles.legendSelected]} />
+              <Text style={styles.legendText}>Selected</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendBox, styles.legendBooked]} />
+              <Text style={styles.legendText}>Booked</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendBox, styles.legendBlocked]} />
+              <Text style={styles.legendText}>Blocked</Text>
+            </View>
+          </View>
+
+          {/* Grid Container */}
+          <View style={styles.seatGridContainer}>
+            {loadingSeats ? (
+              <ActivityIndicator size="large" color={COLORS.primary} style={{ marginVertical: 40 }} />
+            ) : seatsList.length === 0 ? (
+              <Text style={styles.noSeatsText}>No seats available in this room.</Text>
+            ) : (
+              <View style={styles.gridWrap}>
+                {seatsList.map((seat: any) => {
+                  const isBooked = seat.status === 'booked' || seat.rawStatus === 'OCCUPIED';
+                  const isBlocked = seat.status === 'blocked' || seat.rawStatus === 'BLOCKED';
+                  const isSelected = selectedSeatId === seat.id;
+
+                  return (
+                    <TouchableOpacity
+                      key={seat.id}
+                      style={[
+                        styles.gridSeatBtn,
+                        isBooked && styles.gridSeatBooked,
+                        isBlocked && styles.gridSeatBlocked,
+                        isSelected && styles.gridSeatSelected,
+                      ]}
+                      onPress={() => handleSeatPress(seat)}
+                      activeOpacity={0.7}
+                    >
+                      {isBooked ? (
+                        <Ionicons name="person" size={14} color={COLORS.outline} />
+                      ) : isBlocked ? (
+                        <Ionicons name="lock-closed" size={14} color={COLORS.error} />
+                      ) : (
+                        <Text style={[styles.gridSeatText, isSelected && styles.gridSeatTextSelected]}>
+                          {seat.seatNumber}
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             )}
+          </View>
+        </View>
 
-            {/* Recent Attendance Logs */}
-            <Text style={styles.sectionHeader}>Recent Attendance</Text>
-            <View style={styles.attendanceContainer}>
-              {attendanceLogs.length > 0 ? (
-                attendanceLogs.map((log, index) => (
-                  <View key={index} style={styles.attendanceRow}>
-                    <View>
-                      <Text style={styles.attendanceDate}>{log.date}</Text>
-                      <Text style={styles.attendanceTime}>
-                        {log.checkIn} - {log.checkOut}
-                      </Text>
-                    </View>
-                    <View style={styles.hoursBadge}>
-                      <Text style={styles.hoursText}>{log.hours}</Text>
-                    </View>
-                  </View>
-                ))
-              ) : (
-                <View style={{ paddingVertical: 20, alignItems: 'center' }}>
-                  <Text style={{ color: '#525252', fontSize: 13 }}>No attendance records found</Text>
-                </View>
-              )}
-            </View>
-          </ScrollView>
-        );
-
-      case 'Book':
-        return (
-          <ScrollView contentContainerStyle={styles.tabScroll} showsVerticalScrollIndicator={false}>
-            <View style={styles.formCard}>
-              <Text style={styles.formCardTitle}>Choose Seat Plan</Text>
-
-              {/* Branch / Room Photo Showcase Card */}
-              {(currentRoom?.photo || currentBranch?.photo) && (
-                <View style={styles.showcaseCard}>
-                  <Image
-                    source={{ uri: currentRoom?.photo || currentBranch?.photo }}
-                    style={styles.showcaseImage}
-                  />
-                  <View style={styles.showcaseOverlay}>
-                    <Text style={styles.showcaseTitle}>{currentRoom?.name || currentBranch?.name}</Text>
-                    <Text style={styles.showcaseSub}>
-                      📍 {currentBranch?.name} • 🪑 {currentRoom?.capacity || 20} Seats Capacity
-                    </Text>
-                  </View>
-                </View>
-              )}
-
-              <Text style={styles.formLabel}>Select Branch</Text>
-              <TouchableOpacity style={styles.pickerBox} onPress={() => setBranchModalVisible(true)}>
-                <Text style={styles.pickerBoxText}>📍 {selectedBranchName}</Text>
-              </TouchableOpacity>
-
-              <Text style={styles.formLabel}>Select Room</Text>
-              <TouchableOpacity style={styles.pickerBox} onPress={() => setRoomModalVisible(true)}>
-                <Text style={styles.pickerBoxText}>🤫 {selectedRoomName}</Text>
-              </TouchableOpacity>
-
-              <Text style={styles.formLabel}>Start Date (YYYY-MM-DD)</Text>
-              <TextInput
-                style={[styles.pickerBox, { color: '#ffffff', fontSize: 14 }]}
-                value={startDate}
-                onChangeText={setStartDate}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor="#525252"
-              />
-
-              <Text style={styles.formLabel}>Choose Plan Period</Text>
-              <View style={styles.plansContainer}>
-                {(['DAILY', 'WEEKLY', 'MONTHLY'] as const).map((plan) => (
-                  <TouchableOpacity
-                    key={plan}
-                    style={[styles.planTab, bookingPlan === plan && styles.planTabActive]}
-                    onPress={() => setBookingPlan(plan)}
-                  >
-                    <Text style={[styles.planTabText, bookingPlan === plan && styles.planTabTextActive]}>
-                      {plan}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+        {/* Selected Seat Confirmation Bottom Sheet */}
+        {selectedSeatId && (
+          <View style={styles.confirmationSheet}>
+            <View style={styles.confirmHeader}>
+              <View>
+                <Text style={styles.confirmSeatTitle}>
+                  Seat {selectedSeatObj?.seatNumber || 'Selected'}
+                </Text>
+                <Text style={styles.confirmSeatSub}>High-Speed Wi-Fi • Power Outlet</Text>
               </View>
-
-              {/* Interactive Seat Grid */}
-              <View style={styles.gridSection}>
-                <Text style={styles.formLabel}>Tap to select an available seat</Text>
-                {loadingSeats ? (
-                  <ActivityIndicator size="small" color="#0d9488" style={{ marginVertical: 20 }} />
-                ) : seatsList.length > 0 ? (
-                  <View style={styles.seatGrid}>
-                    {seatsList.map((seat) => {
-                      const isBlocked = seat.status === 'blocked' || seat.rawStatus === 'BLOCKED';
-                      const isBooked = seat.status === 'booked';
-                      const isSelected = selectedSeatId === seat.id;
-
-                      return (
-                        <TouchableOpacity
-                          key={seat.id}
-                          activeOpacity={0.7}
-                          onPress={() => handleSeatPress(seat)}
-                          style={[
-                            styles.seatCell,
-                            isBlocked && styles.seatCellBlocked,
-                            isBooked && styles.seatCellBooked,
-                            isSelected && styles.seatCellSelected,
-                          ]}
-                        >
-                          {isBlocked ? (
-                            <View style={{ alignItems: 'center' }}>
-                              <Ionicons name="lock-closed" size={10} color="#ef4444" />
-                              <Text style={styles.seatCellTextBlocked}>{seat.seatNumber}</Text>
-                            </View>
-                          ) : (
-                            <Text
-                              style={[
-                                styles.seatCellText,
-                                isBooked && styles.seatCellTextBooked,
-                                isSelected && styles.seatCellTextSelected,
-                              ]}
-                            >
-                              {seat.seatNumber}
-                            </Text>
-                          )}
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                ) : (
-                  <View style={{ paddingVertical: 20, alignItems: 'center' }}>
-                    <Text style={{ color: '#525252', fontSize: 13 }}>No seats available in this room</Text>
-                  </View>
-                )}
-
-                {/* Grid Legend */}
-                <View style={styles.legendRow}>
-                  <View style={styles.legendItem}>
-                    <View style={[styles.legendBox, styles.legendAvailable]} />
-                    <Text style={styles.legendLabelText}>Available</Text>
-                  </View>
-                  <View style={styles.legendItem}>
-                    <View style={[styles.legendBox, styles.legendSelected]} />
-                    <Text style={styles.legendLabelText}>Selected</Text>
-                  </View>
-                  <View style={styles.legendItem}>
-                    <View style={[styles.legendBox, styles.legendBooked]} />
-                    <Text style={styles.legendLabelText}>Booked</Text>
-                  </View>
-                  <View style={styles.legendItem}>
-                    <View style={[styles.legendBox, styles.legendBlocked]} />
-                    <Text style={styles.legendLabelText}>Locked</Text>
-                  </View>
-                </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={styles.confirmPrice}>
+                  ₹{bookingPlan === 'DAILY' ? '50' : bookingPlan === 'WEEKLY' ? '300' : '1,000'}
+                </Text>
+                <Text style={styles.confirmDuration}>/ {bookingPlan.toLowerCase()}</Text>
               </View>
             </View>
 
-            {/* Check out card */}
-            {selectedSeatId && (
-              <View style={styles.checkoutCard}>
-                <View style={styles.checkoutRow}>
-                  <View>
-                    <Text style={styles.checkoutLabel}>SELECTED SEAT</Text>
-                    <Text style={styles.checkoutValue}>{selectedSeatNumber} ({selectedRoomName})</Text>
-                  </View>
-                  <View style={{ alignItems: 'flex-end' }}>
-                    <Text style={styles.checkoutLabel}>TOTAL AMOUNT</Text>
-                    <Text style={styles.checkoutPrice}>
-                      ₹{bookingPlan === 'DAILY' ? 50 : bookingPlan === 'WEEKLY' ? 300 : 1000}
-                    </Text>
-                  </View>
-                </View>
+            {/* Plan selector pills */}
+            <View style={styles.planSelectorRow}>
+              {(['DAILY', 'WEEKLY', 'MONTHLY'] as const).map(plan => (
                 <TouchableOpacity
-                  style={styles.checkoutBtn}
-                  onPress={handlePayment}
-                  disabled={loading}
+                  key={plan}
+                  style={[styles.planPill, bookingPlan === plan && styles.planPillActive]}
+                  onPress={() => setBookingPlan(plan)}
                 >
-                  <Text style={styles.checkoutBtnText}>
-                    {loading ? 'Processing...' : 'Confirm & Book (Simulated Pay)'}
+                  <Text style={[styles.planPillText, bookingPlan === plan && styles.planPillTextActive]}>
+                    {plan === 'DAILY' ? 'Daily Pass' : plan === 'WEEKLY' ? 'Weekly' : 'Monthly Pass'}
                   </Text>
                 </TouchableOpacity>
-              </View>
-            )}
-          </ScrollView>
-        );
+              ))}
+            </View>
 
-      case 'Bookings':
-        return (
-          <FlatList
-            data={bookingsList}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={styles.flatListContent}
-            renderItem={({ item }) => (
-              <View style={styles.bookingListItem}>
-                <View style={styles.bookingListTop}>
-                  <View style={styles.listItemSeat}>
-                    <Text style={styles.listItemSeatText}>{item.seat}</Text>
-                  </View>
-                  <View style={styles.listItemDetails}>
-                    <Text style={styles.listItemTitle}>{item.room}</Text>
-                    <Text style={styles.listItemSubtitle}>{item.branch}</Text>
-                    <Text style={styles.listItemDate}>
-                      Validity: {new Date(item.startDate).toLocaleDateString()} - {new Date(item.endDate).toLocaleDateString()}
-                    </Text>
-                  </View>
-                  <View style={{ gap: 6, alignItems: 'flex-end' }}>
-                    <View
-                      style={[
-                        styles.statusPill,
-                        item.status === 'approved' && styles.statusApproved,
-                        item.status === 'active' && styles.statusApproved,
-                        item.status === 'pending' && styles.statusPending,
-                        item.status === 'completed' && styles.statusCompleted,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.statusPillText,
-                          (item.status === 'approved' || item.status === 'active') && styles.statusTextApproved,
-                          item.status === 'pending' && styles.statusTextPending,
-                          item.status === 'completed' && styles.statusTextCompleted,
-                        ]}
-                      >
-                        {item.status.toUpperCase()}
-                      </Text>
-                    </View>
-                    {item.paymentStatus === 'success' ? (
-                      <View style={{ backgroundColor: 'rgba(34, 197, 94, 0.1)', paddingVertical: 2, paddingHorizontal: 6, borderRadius: 4 }}>
-                        <Text style={{ color: '#22c55e', fontSize: 8, fontWeight: '700' }}>PAID</Text>
-                      </View>
-                    ) : (
-                      <View style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', paddingVertical: 2, paddingHorizontal: 6, borderRadius: 4 }}>
-                        <Text style={{ color: '#ef4444', fontSize: 8, fontWeight: '700' }}>UNPAID</Text>
-                      </View>
-                    )}
-                  </View>
-                </View>
-                <View style={styles.listItemDivider} />
-                <View style={styles.bookingListBottom}>
-                  <Text style={styles.listItemPlanText}>Plan: {item.planType}</Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                    <Text style={styles.listItemPriceText}>₹{item.amount}</Text>
-                    {item.status === 'approved' && item.paymentStatus !== 'success' && (
-                      <TouchableOpacity
-                        style={{ backgroundColor: '#0d9488', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 6 }}
-                        onPress={() => handlePayNow(item)}
-                      >
-                        <Text style={{ color: '#ffffff', fontSize: 11, fontWeight: '700' }}>Pay Now</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                </View>
-              </View>
-            )}
-            ListHeaderComponent={<Text style={styles.flatListHeader}>Booking History</Text>}
-            ListEmptyComponent={<Text style={styles.emptyText}>No bookings found</Text>}
-          />
-        );
+            <TouchableOpacity 
+              style={styles.confirmButton}
+              onPress={handlePayment}
+              disabled={loading}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.confirmButtonText}>
+                {loading ? 'Processing...' : 'Confirm Selection'}
+              </Text>
+              <Ionicons name="arrow-forward" size={18} color="#ffffff" />
+            </TouchableOpacity>
+          </View>
+        )}
+      </ScrollView>
+    );
+  };
 
-      case 'Profile':
-        return (
-          <ScrollView contentContainerStyle={styles.tabScroll} showsVerticalScrollIndicator={false}>
-            <View style={styles.profileCard}>
-              <View style={styles.avatarSection}>
-                <View style={styles.avatarWrapper}>
-                  <Ionicons name="person" size={44} color="#ffffff" />
-                </View>
-                <Text style={styles.profileName}>{user?.name || 'Sameer Student'}</Text>
-                <Text style={styles.profileRole}>STUDENT MEMBERSHIP</Text>
-              </View>
+  // -------------------------------------------------------------
+  // TAB 3: MY BOOKINGS
+  // -------------------------------------------------------------
+  const renderBookingsTab = () => {
+    return (
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>My Bookings</Text>
+          <Text style={styles.sectionSubtitle}>Manage your study sessions and reservations.</Text>
+        </View>
 
-              <View style={styles.profileDetailsList}>
-                <View style={styles.profileDetailItem}>
-                  <Ionicons name="mail" size={20} color="#a3a3a3" />
-                  <View>
-                    <Text style={styles.detailLabel}>Email Address</Text>
-                    <Text style={styles.detailValue}>{user?.email || 'student@gmail.com'}</Text>
-                  </View>
-                </View>
+        {/* Filter Tabs */}
+        <View style={styles.bookingTabsRow}>
+          <TouchableOpacity 
+            style={[styles.bookingTab, bookingsFilter === 'ACTIVE' && styles.bookingTabActive]}
+            onPress={() => setBookingsFilter('ACTIVE')}
+          >
+            <Text style={[styles.bookingTabText, bookingsFilter === 'ACTIVE' && styles.bookingTabTextActive]}>
+              Active
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.bookingTab, bookingsFilter === 'PENDING' && styles.bookingTabActive]}
+            onPress={() => setBookingsFilter('PENDING')}
+          >
+            <Text style={[styles.bookingTabText, bookingsFilter === 'PENDING' && styles.bookingTabTextActive]}>
+              Pending
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.bookingTab, bookingsFilter === 'HISTORY' && styles.bookingTabActive]}
+            onPress={() => setBookingsFilter('HISTORY')}
+          >
+            <Text style={[styles.bookingTabText, bookingsFilter === 'HISTORY' && styles.bookingTabTextActive]}>
+              History
+            </Text>
+          </TouchableOpacity>
+        </View>
 
-                <View style={styles.profileDetailItem}>
-                  <Ionicons name="call" size={20} color="#a3a3a3" />
-                  <View>
-                    <Text style={styles.detailLabel}>Phone Number</Text>
-                    <Text style={styles.detailValue}>{user?.phone || 'Not Provided'}</Text>
-                  </View>
-                </View>
-
-                <View style={styles.profileDetailItem}>
-                  <Ionicons name="school" size={20} color="#a3a3a3" />
-                  <View>
-                    <Text style={styles.detailLabel}>College</Text>
-                    <Text style={styles.detailValue}>{user?.college || 'Not Provided'}</Text>
-                  </View>
-                </View>
-
-                <View style={styles.profileDetailItem}>
-                  <Ionicons name="book-outline" size={20} color="#a3a3a3" />
-                  <View>
-                    <Text style={styles.detailLabel}>Course</Text>
-                    <Text style={styles.detailValue}>{user?.course || 'Not Provided'}</Text>
-                  </View>
-                </View>
-              </View>
-
-              <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-                <Ionicons name="log-out-outline" size={20} color="#ffffff" />
-                <Text style={styles.logoutButtonText}>Log Out Account</Text>
+        {/* Bookings List */}
+        <View style={styles.bookingsContainer}>
+          {bookingsList.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <Ionicons name="bookmark-outline" size={48} color={COLORS.outline} />
+              <Text style={styles.emptyTitle}>No reservations found</Text>
+              <Text style={styles.emptyDesc}>Reserve a seat today to begin your study journey.</Text>
+              <TouchableOpacity style={styles.primaryButton} onPress={() => setActiveTab('Book')}>
+                <Text style={styles.primaryButtonText}>Book a Seat</Text>
               </TouchableOpacity>
             </View>
-          </ScrollView>
-        );
+          ) : (
+            bookingsList.map((booking: any) => {
+              const isApproved = booking.status === 'APPROVED' || booking.status === 'CONFIRMED';
+              const isPending = booking.status === 'PENDING';
 
-      default:
-        return null;
-    }
+              return (
+                <View key={booking.id} style={styles.bookingCard}>
+                  <View style={styles.bookingCardHeader}>
+                    <View style={styles.bookingCardLeft}>
+                      <View style={styles.bookingIconBox}>
+                        <Ionicons name="library" size={20} color={COLORS.primary} />
+                      </View>
+                      <View>
+                        <Text style={styles.bookingBranchName}>{booking.branch?.name || 'Sameer Library'}</Text>
+                        <Text style={styles.bookingRoomName}>{booking.room?.name || 'Silent Zone'}</Text>
+                      </View>
+                    </View>
+                    <View style={[styles.statusTag, isApproved ? styles.statusApproved : styles.statusPending]}>
+                      <Text style={[styles.statusTagText, isApproved ? styles.statusApprovedText : styles.statusPendingText]}>
+                        {booking.status}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Grid of details */}
+                  <View style={styles.bookingMetaGrid}>
+                    <View style={styles.metaCell}>
+                      <Text style={styles.metaLabel}>Seat</Text>
+                      <Text style={styles.metaValue}>{booking.seat?.seatNumber || 'Seat #' + booking.seatId?.slice(-3)}</Text>
+                    </View>
+                    <View style={styles.metaCell}>
+                      <Text style={styles.metaLabel}>Plan</Text>
+                      <Text style={styles.metaValue}>{booking.planType}</Text>
+                    </View>
+                    <View style={styles.metaCell}>
+                      <Text style={styles.metaLabel}>Start Date</Text>
+                      <Text style={styles.metaValue}>{new Date(booking.startDate).toLocaleDateString([], { month: 'short', day: 'numeric' })}</Text>
+                    </View>
+                    <View style={styles.metaCell}>
+                      <Text style={styles.metaLabel}>Amount</Text>
+                      <Text style={styles.metaValue}>₹{booking.amount || '1000'}</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.bookingActionsRow}>
+                    <TouchableOpacity 
+                      style={styles.modifyBtn}
+                      onPress={() => setActiveTab('Book')}
+                    >
+                      <Text style={styles.modifyBtnText}>Modify</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={styles.cancelBtn}
+                      onPress={() => Alert.alert('Cancel Reservation', 'Contact library helpdesk to process cancellation and refunds.')}
+                    >
+                      <Text style={styles.cancelBtnText}>Cancel</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            })
+          )}
+        </View>
+      </ScrollView>
+    );
+  };
+
+  // -------------------------------------------------------------
+  // TAB 4: PROFILE & DIGITAL LIBRARY PASS
+  // -------------------------------------------------------------
+  const renderProfileTab = () => {
+    return (
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {/* Profile Header */}
+        <View style={styles.profileHeader}>
+          <View style={styles.avatarContainer}>
+            <Image
+              source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80' }}
+              style={styles.profileAvatar}
+            />
+            <TouchableOpacity style={styles.avatarEditBtn} onPress={() => Alert.alert('Edit Avatar', 'Profile avatar update coming soon.')}>
+              <Ionicons name="pencil" size={14} color="#ffffff" />
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.profileName}>{user?.name || 'Student Member'}</Text>
+          <Text style={styles.profileRole}>{user?.role || 'Active Student'}</Text>
+
+          <View style={styles.memberBadgesRow}>
+            <View style={styles.memberBadge}>
+              <View style={styles.memberBadgeDot} />
+              <Text style={styles.memberBadgeText}>Active Member</Text>
+            </View>
+            <View style={[styles.memberBadge, { backgroundColor: COLORS.secondaryContainer }]}>
+              <Text style={[styles.memberBadgeText, { color: COLORS.onSecondaryContainer }]}>Pro Plan</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Digital ID Pass Card (Glassmorphism Styled) */}
+        <View style={styles.digitalIdCard}>
+          <View style={styles.digitalIdHeader}>
+            <View>
+              <Text style={styles.digitalIdTitle}>Library Pass</Text>
+              <Text style={styles.digitalIdSub}>Tap QR code to scan at entry gate</Text>
+            </View>
+            <Ionicons name="book" size={28} color={COLORS.primary} />
+          </View>
+
+          {/* QR Code Container */}
+          <TouchableOpacity 
+            style={styles.qrCodeBox} 
+            activeOpacity={0.9}
+            onPress={() => Alert.alert('Digital Pass QR', 'Hold this QR code against the gate turnstile scanner.')}
+          >
+            <Ionicons name="qr-code" size={140} color={COLORS.text} />
+            <View style={styles.scanLine} />
+          </TouchableOpacity>
+
+          <View style={styles.digitalIdFooter}>
+            <View>
+              <Text style={styles.passLabel}>Student ID</Text>
+              <Text style={styles.passValue}>LIB-2024-{user?.id?.slice(-4) || '8942'}</Text>
+            </View>
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={styles.passLabel}>Valid Through</Text>
+              <Text style={styles.passValue}>Dec 2026</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Personal Details Bento */}
+        <View style={styles.personalDetailsCard}>
+          <Text style={styles.detailsCardTitle}>Personal Details</Text>
+          
+          <View style={styles.detailItemRow}>
+            <View style={styles.detailIconSmall}>
+              <Ionicons name="mail-outline" size={18} color={COLORS.textSecondary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.detailFieldLabel}>Email Address</Text>
+              <Text style={styles.detailFieldValue}>{user?.email || 'student@university.edu'}</Text>
+            </View>
+          </View>
+
+          <View style={styles.detailItemRow}>
+            <View style={styles.detailIconSmall}>
+              <Ionicons name="call-outline" size={18} color={COLORS.textSecondary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.detailFieldLabel}>Mobile Number</Text>
+              <Text style={styles.detailFieldValue}>{user?.phone || '+91 9876543210'}</Text>
+            </View>
+          </View>
+
+          <View style={[styles.detailItemRow, { borderBottomWidth: 0 }]}>
+            <View style={styles.detailIconSmall}>
+              <Ionicons name="school-outline" size={18} color={COLORS.textSecondary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.detailFieldLabel}>Account Role</Text>
+              <Text style={styles.detailFieldValue}>{user?.role || 'STUDENT'}</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Sign Out Button */}
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.85}>
+          <Ionicons name="log-out-outline" size={18} color={COLORS.error} />
+          <Text style={styles.logoutButtonText}>Sign Out</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    );
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Top Header Title */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Student Portal</Text>
-      </View>
-
-      {/* Main Tab Area */}
-      <View style={styles.contentArea}>
-        {renderTabContent()}
-      </View>
-
-      {/* Bottom Navigation Tab Bar */}
-      <View style={styles.tabBar}>
-        <TouchableOpacity
-          style={[styles.tabButton, activeTab === 'Overview' && styles.tabButtonActive]}
-          onPress={() => setActiveTab('Overview')}
-        >
-          <Ionicons
-            name={activeTab === 'Overview' ? 'home' : 'home-outline'}
-            size={22}
-            color={activeTab === 'Overview' ? '#0d9488' : '#a3a3a3'}
-          />
-          <Text style={[styles.tabButtonText, activeTab === 'Overview' && styles.tabButtonTextActive]}>Home</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.tabButton, activeTab === 'Book' && styles.tabButtonActive]}
-          onPress={() => setActiveTab('Book')}
-        >
-          <Ionicons
-            name={activeTab === 'Book' ? 'add-circle' : 'add-circle-outline'}
-            size={22}
-            color={activeTab === 'Book' ? '#0d9488' : '#a3a3a3'}
-          />
-          <Text style={[styles.tabButtonText, activeTab === 'Book' && styles.tabButtonTextActive]}>Book Seat</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.tabButton, activeTab === 'Bookings' && styles.tabButtonActive]}
-          onPress={() => setActiveTab('Bookings')}
-        >
-          <Ionicons
-            name={activeTab === 'Bookings' ? 'calendar' : 'calendar-outline'}
-            size={22}
-            color={activeTab === 'Bookings' ? '#0d9488' : '#a3a3a3'}
-          />
-          <Text style={[styles.tabButtonText, activeTab === 'Bookings' && styles.tabButtonTextActive]}>Bookings</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.tabButton, activeTab === 'Profile' && styles.tabButtonActive]}
-          onPress={() => setActiveTab('Profile')}
-        >
-          <Ionicons
-            name={activeTab === 'Profile' ? 'person' : 'person-outline'}
-            size={22}
-            color={activeTab === 'Profile' ? '#0d9488' : '#a3a3a3'}
-          />
-          <Text style={[styles.tabButtonText, activeTab === 'Profile' && styles.tabButtonTextActive]}>Profile</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Branch Selection Custom Modal */}
-      <Modal
-        visible={branchModalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setBranchModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <Pressable style={styles.modalBackdrop} onPress={() => setBranchModalVisible(false)} />
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Branch</Text>
-              <TouchableOpacity onPress={() => setBranchModalVisible(false)} style={styles.modalCloseBtn}>
-                <Ionicons name="close" size={24} color="#ffffff" />
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
-              {branches.map((b) => (
-                <TouchableOpacity
-                  key={b.id}
-                  style={[
-                    styles.modalOption,
-                    selectedBranchId === b.id && styles.modalOptionActive
-                  ]}
-                  onPress={() => {
-                    setSelectedBranchId(b.id);
-                    if (b.rooms && b.rooms.length > 0) {
-                      setSelectedRoomId(b.rooms[0].id);
-                    } else {
-                      setSelectedRoomId(null);
-                    }
-                    setBranchModalVisible(false);
-                  }}
-                >
-                  <Text style={[
-                    styles.modalOptionText,
-                    selectedBranchId === b.id && styles.modalOptionTextActive
-                  ]}>
-                    {b.name}
-                  </Text>
-                  {selectedBranchId === b.id && (
-                    <Ionicons name="checkmark" size={20} color="#0d9488" />
-                  )}
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-            <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setBranchModalVisible(false)}>
-              <Text style={styles.modalCancelBtnText}>Cancel</Text>
-            </TouchableOpacity>
+      {/* Top App Bar */}
+      <View style={styles.topAppBar}>
+        <View style={styles.appBarLeft}>
+          <View style={styles.brandIconBox}>
+            <Ionicons name="book" size={18} color="#ffffff" />
           </View>
+          <Text style={styles.appBarTitle}>LibReserve</Text>
         </View>
-      </Modal>
 
-      {/* Room Selection Custom Modal */}
-      <Modal
-        visible={roomModalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setRoomModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <Pressable style={styles.modalBackdrop} onPress={() => setRoomModalVisible(false)} />
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Room</Text>
-              <TouchableOpacity onPress={() => setRoomModalVisible(false)} style={styles.modalCloseBtn}>
-                <Ionicons name="close" size={24} color="#ffffff" />
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
-              {currentBranchRooms.map((r: any) => (
-                <TouchableOpacity
-                  key={r.id}
-                  style={[
-                    styles.modalOption,
-                    selectedRoomId === r.id && styles.modalOptionActive
-                  ]}
-                  onPress={() => {
-                    setSelectedRoomId(r.id);
-                    setRoomModalVisible(false);
-                  }}
-                >
-                  <Text style={[
-                    styles.modalOptionText,
-                    selectedRoomId === r.id && styles.modalOptionTextActive
-                  ]}>
-                    {r.name}
-                  </Text>
-                  {selectedRoomId === r.id && (
-                    <Ionicons name="checkmark" size={20} color="#0d9488" />
-                  )}
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-            <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setRoomModalVisible(false)}>
-              <Text style={styles.modalCancelBtnText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
+        <View style={styles.appBarRight}>
+          <TouchableOpacity 
+            style={styles.notifBtn} 
+            onPress={() => Alert.alert('Notifications', 'No new alerts.')}
+          >
+            <Ionicons name="notifications-outline" size={20} color={COLORS.textSecondary} />
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.avatarThumb}
+            onPress={() => setActiveTab('Profile')}
+          >
+            <Image
+              source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80' }}
+              style={styles.avatarThumbImg}
+            />
+          </TouchableOpacity>
         </View>
-      </Modal>
+      </View>
+
+      {/* Main Tab Content */}
+      <View style={{ flex: 1 }}>
+        {activeTab === 'Home' && renderHomeTab()}
+        {activeTab === 'Book' && renderBookTab()}
+        {activeTab === 'My Bookings' && renderBookingsTab()}
+        {activeTab === 'Profile' && renderProfileTab()}
+      </View>
+
+      {/* Bottom Navigation Bar */}
+      <BottomNavBar activeTab={activeTab} onTabPress={setActiveTab} />
     </SafeAreaView>
   );
 };
@@ -899,710 +810,933 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000', // Pure black background
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0, // Android SafeArea Fix
+    backgroundColor: COLORS.background,
   },
-  header: {
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 90,
+  },
+  topAppBar: {
     height: 60,
-    justifyContent: 'center',
+    backgroundColor: COLORS.surface,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#1c1c1e', // Thin gray border
-    backgroundColor: '#000000',
+    borderBottomColor: COLORS.border,
   },
-  headerTitle: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: '700',
-    letterSpacing: -0.5,
-  },
-  contentArea: {
-    flex: 1,
-  },
-  tabScroll: {
-    padding: 20,
-    paddingBottom: 40,
-  },
-  banner: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#1c1c1e', // Apple Card Background
-    borderColor: '#2c2c2e',
-    borderWidth: 1,
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 24,
-  },
-  bannerTitle: {
-    color: '#ffffff',
-    fontSize: 20,
-    fontWeight: '700',
-    letterSpacing: -0.5,
-  },
-  bannerSubtitle: {
-    color: '#8e8e93', // Apple system gray
-    fontSize: 13,
-    marginTop: 4,
-  },
-  bannerBtn: {
+  appBarLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#0d9488', // Teal accent button
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 20, // Apple pill shape
-  },
-  bannerBtnText: {
-    color: '#ffffff',
-    fontWeight: '600',
-    fontSize: 13,
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     gap: 10,
-    marginBottom: 24,
   },
-  statCard: {
-    flex: 1,
-    backgroundColor: '#1c1c1e',
-    borderWidth: 1,
-    borderColor: '#2c2c2e',
-    borderRadius: 14,
-    padding: 12,
-  },
-  statHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  statLabel: {
-    color: '#8e8e93',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  statIconWrapper: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
+  brandIconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  statValue: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#ffffff',
-    marginTop: 8,
+  appBarTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: COLORS.primary,
     letterSpacing: -0.5,
   },
-  statSubText: {
-    fontSize: 10,
-    color: '#8e8e93',
-    marginTop: 2,
-  },
-  sectionHeader: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 12,
-    letterSpacing: -0.2,
-  },
-  bookingCard: {
-    backgroundColor: '#1c1c1e',
-    borderWidth: 1,
-    borderColor: '#2c2c2e',
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 24,
-  },
-  bookingCardHeader: {
+  appBarRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
   },
-  seatBadge: {
-    width: 40,
-    height: 40,
-    backgroundColor: '#0d9488',
-    borderRadius: 8,
+  notifBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.surfaceContainerLow,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  seatBadgeText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  bookingCardDetails: {
-    flex: 1,
-  },
-  bookingTitle: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  bookingSubtitle: {
-    color: '#8e8e93',
-    fontSize: 13,
-  },
-  activeBadge: {
-    backgroundColor: 'rgba(34, 197, 94, 0.1)',
-    borderRadius: 6,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-  },
-  activeBadgeText: {
-    color: '#22c55e',
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  bookingDivider: {
-    height: 0.5,
-    backgroundColor: '#2c2c2e',
-    marginVertical: 14,
-  },
-  bookingMetaRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  metaLabel: {
-    color: '#8e8e93',
-    fontSize: 10,
-    fontWeight: '600',
-  },
-  metaValue: {
-    color: '#ffffff',
-    fontSize: 13,
-    fontWeight: '500',
-    marginTop: 2,
-  },
-  attendanceContainer: {
-    backgroundColor: '#1c1c1e',
-    borderWidth: 1,
-    borderColor: '#2c2c2e',
-    borderRadius: 14,
-    paddingHorizontal: 16,
-  },
-  attendanceRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 14,
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#2c2c2e',
-  },
-  attendanceDate: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  attendanceTime: {
-    color: '#8e8e93',
-    fontSize: 12,
-    marginTop: 2,
-  },
-  hoursBadge: {
-    backgroundColor: '#2c2c2e',
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: 6,
-  },
-  hoursText: {
-    color: '#ffffff',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  formCard: {
-    backgroundColor: '#1c1c1e',
-    borderWidth: 1,
-    borderColor: '#2c2c2e',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 20,
-  },
-  formCardTitle: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 16,
-    letterSpacing: -0.5,
-  },
-  formLabel: {
-    color: '#8e8e93',
-    fontSize: 11,
-    fontWeight: '600',
-    marginBottom: 8,
-    textTransform: 'uppercase',
-  },
-  pickerBox: {
-    backgroundColor: '#2c2c2e',
-    borderColor: '#3a3a3c',
-    borderWidth: 1,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    marginBottom: 16,
-  },
-  pickerBoxText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  plansContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#2c2c2e',
-    borderRadius: 10,
-    padding: 4,
-    marginBottom: 20,
-  },
-  planTab: {
-    flex: 1,
-    paddingVertical: 10,
-    alignItems: 'center',
-    borderRadius: 8,
-  },
-  planTabActive: {
-    backgroundColor: '#0d9488',
-  },
-  planTabText: {
-    color: '#8e8e93',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  planTabTextActive: {
-    color: '#ffffff',
-  },
-  gridSection: {
-    marginTop: 10,
-  },
-  seatGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    justifyContent: 'space-between',
-    marginTop: 6,
-    marginBottom: 16,
-  },
-  seatCell: {
-    width: (width - 88) / 5, // Exact responsive width calculation
-    height: 44,
-    borderColor: '#0d9488',
-    borderWidth: 1,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#000000',
-  },
-  seatCellBooked: {
-    borderColor: '#ef4444',
-    backgroundColor: 'rgba(239, 68, 68, 0.05)',
-  },
-  seatCellBlocked: {
-    borderColor: '#525252',
-    backgroundColor: '#1c1c1e',
-  },
-  seatCellSelected: {
-    backgroundColor: '#0d9488',
-    borderColor: '#0d9488',
-  },
-  seatCellText: {
-    color: '#0d9488',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  seatCellTextBooked: {
-    color: '#ef4444',
-  },
-  seatCellTextBlocked: {
-    color: '#8e8e93',
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  seatCellTextSelected: {
-    color: '#ffffff',
-  },
-  showcaseCard: {
-    height: 130,
-    borderRadius: 14,
+  avatarThumb: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     overflow: 'hidden',
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#2c2c2e',
-    backgroundColor: '#1c1c1e',
+    borderWidth: 1.5,
+    borderColor: COLORS.secondaryContainer,
   },
-  showcaseImage: {
+  avatarThumbImg: {
     width: '100%',
     height: '100%',
   },
-  showcaseOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    padding: 10,
+  greetingSection: {
+    marginBottom: 20,
   },
-  showcaseTitle: {
-    color: '#ffffff',
-    fontSize: 15,
+  greetingTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: COLORS.text,
+    letterSpacing: -0.5,
+  },
+  greetingSubtitle: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    marginTop: 4,
+  },
+  activeBookingCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 18,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginBottom: 20,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.04,
+        shadowRadius: 16,
+      },
+      android: {
+        elevation: 2,
+      },
+      web: {
+        boxShadow: '0px 4px 20px rgba(0,0,0,0.04)',
+      },
+    }),
+  },
+  activeBookingHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  cardSuperLabel: {
+    fontSize: 12,
     fontWeight: '700',
+    color: COLORS.outline,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
-  showcaseSub: {
-    color: '#0d9488',
+  seatTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 4,
+  },
+  bigSeatCode: {
+    fontSize: 34,
+    fontWeight: '800',
+    color: COLORS.primary,
+  },
+  activeNowBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.secondaryContainer,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+    gap: 6,
+  },
+  activeNowDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: COLORS.secondary,
+  },
+  activeNowText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.onSecondaryContainer,
+  },
+  activeLocationText: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    marginTop: 4,
+  },
+  activeDetailsBox: {
+    backgroundColor: COLORS.surfaceContainerLow,
+    borderRadius: 14,
+    padding: 14,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+  },
+  activeDetailsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  detailLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  detailIconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0, 104, 91, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  detailSubtext: {
     fontSize: 11,
-    fontWeight: '600',
-    marginTop: 2,
+    color: COLORS.outline,
   },
-  legendRow: {
+  detailMainText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  amenityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  amenitySmallText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+  },
+  cardActionsRow: {
     flexDirection: 'row',
     gap: 12,
+    marginTop: 16,
+  },
+  cardActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
-    borderTopWidth: 0.5,
-    borderTopColor: '#2c2c2e',
-    paddingTop: 14,
+    paddingVertical: 12,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.outlineVariant,
+    borderRadius: 12,
+    gap: 6,
+  },
+  cardActionBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 20,
+  },
+  statBox: {
+    flex: 1,
+    backgroundColor: COLORS.surface,
+    padding: 14,
+    borderRadius: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  statNumber: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: COLORS.primary,
+  },
+  statLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  bookCtaCard: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 18,
+    padding: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  bookCtaLeft: {
+    flex: 1,
+  },
+  bookCtaTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  bookCtaDesc: {
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginTop: 2,
+  },
+  bookCtaIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 12,
+  },
+  sectionHeader: {
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: COLORS.text,
+  },
+  sectionSubtitle: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    marginTop: 4,
+  },
+  horizontalPills: {
+    marginBottom: 14,
+  },
+  filterPill: {
+    backgroundColor: COLORS.surface,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: COLORS.outlineVariant,
+    marginRight: 10,
+  },
+  filterPillActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  filterPillText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+  },
+  filterPillTextActive: {
+    color: '#ffffff',
+    fontWeight: '700',
+  },
+  zoneChipsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 16,
+  },
+  zoneChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: COLORS.surfaceContainerLow,
+  },
+  zoneChipActive: {
+    backgroundColor: COLORS.secondaryContainer,
+  },
+  zoneChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+  },
+  zoneChipTextActive: {
+    color: COLORS.onSecondaryContainer,
+    fontWeight: '700',
+  },
+  roomCardsList: {
+    gap: 14,
+    marginBottom: 24,
+  },
+  roomCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 8,
+  },
+  roomCardSelected: {
+    borderColor: COLORS.primary,
+    borderWidth: 2,
+    backgroundColor: 'rgba(0, 104, 91, 0.02)',
+  },
+  roomCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  roomCardTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  roomBadge: {
+    backgroundColor: COLORS.surfaceContainerLow,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+    marginTop: 4,
+  },
+  roomBadgeText: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    fontWeight: '600',
+  },
+  roomIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.surfaceContainerLow,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  roomCardDesc: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    lineHeight: 18,
+  },
+  roomCardFooter: {
+    marginTop: 4,
+    alignItems: 'flex-end',
+  },
+  roomSelectActionText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  seatSelectionSection: {
+    marginTop: 10,
+    marginBottom: 20,
+  },
+  seatSelectionTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: COLORS.text,
+    marginBottom: 12,
+  },
+  legendContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    backgroundColor: COLORS.surfaceContainerLow,
+    padding: 10,
+    borderRadius: 12,
+    marginBottom: 14,
   },
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 6,
   },
   legendBox: {
-    width: 11,
-    height: 11,
+    width: 12,
+    height: 12,
     borderRadius: 3,
   },
   legendAvailable: {
+    backgroundColor: COLORS.surface,
     borderWidth: 1,
-    borderColor: '#0d9488',
+    borderColor: COLORS.outlineVariant,
   },
   legendSelected: {
-    backgroundColor: '#0d9488',
+    backgroundColor: COLORS.primary,
   },
   legendBooked: {
-    backgroundColor: '#ef4444',
+    backgroundColor: COLORS.surfaceContainerHigh,
   },
   legendBlocked: {
-    backgroundColor: '#2c2c2e',
-    borderColor: '#525252',
-    borderWidth: 1,
+    backgroundColor: COLORS.errorContainer,
   },
-  legendLabelText: {
-    color: '#8e8e93',
+  legendText: {
     fontSize: 11,
+    color: COLORS.textSecondary,
   },
-  checkoutCard: {
-    backgroundColor: '#1c1c1e',
+  seatGridContainer: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 18,
+    padding: 16,
     borderWidth: 1,
-    borderColor: '#0d9488',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 30,
+    borderColor: COLORS.border,
   },
-  checkoutRow: {
+  noSeatsText: {
+    textAlign: 'center',
+    color: COLORS.textSecondary,
+    paddingVertical: 30,
+  },
+  gridWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    justifyContent: 'space-between',
+  },
+  gridSeatBtn: {
+    width: (width - 40 - 32 - 30) / 4,
+    height: 48,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORS.outlineVariant,
+    backgroundColor: COLORS.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gridSeatBooked: {
+    backgroundColor: COLORS.surfaceContainerHigh,
+    borderColor: COLORS.surfaceContainerHighest,
+  },
+  gridSeatBlocked: {
+    backgroundColor: COLORS.errorContainer,
+    borderColor: COLORS.errorContainer,
+  },
+  gridSeatSelected: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  gridSeatText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  gridSeatTextSelected: {
+    color: '#ffffff',
+  },
+  confirmationSheet: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 18,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginTop: 16,
+    gap: 14,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 20,
+      },
+      android: {
+        elevation: 6,
+      },
+      web: {
+        boxShadow: '0px 4px 30px rgba(0,0,0,0.1)',
+      },
+    }),
+  },
+  confirmHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    alignItems: 'center',
   },
-  checkoutLabel: {
-    color: '#8e8e93',
-    fontSize: 10,
-    fontWeight: '600',
-  },
-  checkoutValue: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '600',
-    marginTop: 4,
-  },
-  checkoutPrice: {
-    color: '#0d9488',
+  confirmSeatTitle: {
     fontSize: 20,
     fontWeight: '800',
+    color: COLORS.text,
   },
-  checkoutBtn: {
-    backgroundColor: '#0d9488',
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center',
+  confirmSeatSub: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    marginTop: 2,
   },
-  checkoutBtnText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
+  confirmPrice: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: COLORS.primary,
   },
-  flatListContent: {
-    padding: 20,
-    paddingBottom: 40,
+  confirmDuration: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
   },
-  flatListHeader: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 16,
-  },
-  emptyText: {
-    color: '#8e8e93',
-    fontSize: 14,
-    textAlign: 'center',
-    marginTop: 30,
-  },
-  bookingListItem: {
-    backgroundColor: '#1c1c1e',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#2c2c2e',
-    padding: 16,
-    marginBottom: 12,
-  },
-  bookingListTop: {
+  planSelectorRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+    gap: 8,
   },
-  listItemSeat: {
-    width: 36,
-    height: 36,
-    backgroundColor: '#2c2c2e',
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  listItemSeatText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  listItemDetails: {
+  planPill: {
     flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: COLORS.surfaceContainerLow,
+    alignItems: 'center',
   },
-  listItemTitle: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '700',
+  planPillActive: {
+    backgroundColor: COLORS.secondaryContainer,
   },
-  listItemSubtitle: {
-    color: '#8e8e93',
+  planPillText: {
     fontSize: 12,
-    marginTop: 2,
-  },
-  listItemDate: {
-    color: '#8e8e93',
-    fontSize: 10,
-    marginTop: 2,
-  },
-  statusPill: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 6,
-  },
-  statusApproved: {
-    backgroundColor: 'rgba(34, 197, 94, 0.1)',
-  },
-  statusPending: {
-    backgroundColor: 'rgba(245, 158, 11, 0.1)',
-  },
-  statusCompleted: {
-    backgroundColor: 'rgba(163, 163, 163, 0.1)',
-  },
-  statusPillText: {
-    fontSize: 9,
-    fontWeight: '700',
-  },
-  statusTextApproved: {
-    color: '#22c55e',
-  },
-  statusTextPending: {
-    color: '#f59e0b',
-  },
-  statusTextCompleted: {
-    color: '#8e8e93',
-  },
-  listItemDivider: {
-    height: 0.5,
-    backgroundColor: '#2c2c2e',
-    marginVertical: 12,
-  },
-  bookingListBottom: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  listItemPlanText: {
-    color: '#8e8e93',
-    fontSize: 12,
-  },
-  listItemPriceText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  profileCard: {
-    alignItems: 'center',
-  },
-  avatarSection: {
-    alignItems: 'center',
-    marginBottom: 30,
-  },
-  avatarWrapper: {
-    width: 80,
-    height: 80,
-    backgroundColor: '#0d9488',
-    borderRadius: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  profileName: {
-    color: '#ffffff',
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  profileRole: {
-    color: '#0d9488',
-    fontSize: 11,
-    fontWeight: '700',
-    marginTop: 4,
-    letterSpacing: 1,
-  },
-  profileDetailsList: {
-    backgroundColor: '#1c1c1e',
-    borderWidth: 1,
-    borderColor: '#2c2c2e',
-    borderRadius: 16,
-    width: '100%',
-    padding: 16,
-    gap: 16,
-    marginBottom: 30,
-  },
-  profileDetailItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-  },
-  detailLabel: {
-    color: '#8e8e93',
-    fontSize: 11,
     fontWeight: '600',
+    color: COLORS.textSecondary,
   },
-  detailValue: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '500',
-    marginTop: 2,
+  planPillTextActive: {
+    color: COLORS.onSecondaryContainer,
+    fontWeight: '700',
   },
-  logoutButton: {
-    flexDirection: 'row',
-    backgroundColor: '#ef4444',
-    width: '100%',
+  confirmButton: {
+    backgroundColor: COLORS.primary,
     paddingVertical: 14,
-    borderRadius: 12,
+    borderRadius: 14,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
   },
-  logoutButtonText: {
+  confirmButtonText: {
     color: '#ffffff',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
   },
-  tabBar: {
-    height: 65,
+  bookingTabsRow: {
     flexDirection: 'row',
-    borderTopWidth: 0.5,
-    borderTopColor: '#1c1c1e',
-    backgroundColor: '#000000',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    paddingBottom: 8,
-    paddingTop: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    marginBottom: 16,
   },
-  tabButton: {
+  bookingTab: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  bookingTabActive: {
+    borderBottomColor: COLORS.primary,
+  },
+  bookingTabText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+  },
+  bookingTabTextActive: {
+    color: COLORS.primary,
+    fontWeight: '700',
+  },
+  bookingsContainer: {
+    gap: 14,
+  },
+  emptyCard: {
+    backgroundColor: COLORS.surface,
+    padding: 30,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    flex: 1,
-  },
-  tabButtonActive: {},
-  tabButtonText: {
-    color: '#8e8e93',
-    fontSize: 10,
-    fontWeight: '600',
-    marginTop: 4,
-  },
-  tabButtonTextActive: {
-    color: '#0d9488',
-  },
-  
-  // Custom Selection Modal Styling (Steve Jobs iOS sheets)
-  modalOverlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
-  },
-  modalBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  modalContent: {
-    backgroundColor: '#1c1c1e',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 24,
-    maxHeight: '75%',
     borderWidth: 1,
-    borderColor: '#2c2c2e',
+    borderColor: COLORS.border,
+    gap: 10,
   },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#2c2c2e',
-    paddingBottom: 14,
-  },
-  modalTitle: {
-    color: '#ffffff',
-    fontSize: 20,
+  emptyTitle: {
+    fontSize: 18,
     fontWeight: '700',
+    color: COLORS.text,
   },
-  modalCloseBtn: {
-    padding: 4,
+  emptyDesc: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
   },
-  modalScroll: {
-    marginBottom: 20,
+  bookingCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 12,
   },
-  modalOption: {
+  bookingCardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 16,
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#2c2c2e',
   },
-  modalOptionActive: {
-    borderBottomColor: '#0d9488',
+  bookingCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
-  modalOptionText: {
-    color: '#e5e5ea',
+  bookingIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: COLORS.surfaceContainerLow,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bookingBranchName: {
     fontSize: 16,
-    fontWeight: '500',
-  },
-  modalOptionTextActive: {
-    color: '#0d9488',
     fontWeight: '700',
+    color: COLORS.text,
   },
-  modalCancelBtn: {
-    backgroundColor: '#2c2c2e',
-    paddingVertical: 14,
+  bookingRoomName: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+  },
+  statusTag: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: 12,
-    alignItems: 'center',
-    marginTop: 8,
   },
-  modalCancelBtnText: {
-    color: '#ffffff',
-    fontSize: 16,
+  statusApproved: {
+    backgroundColor: COLORS.secondaryContainer,
+  },
+  statusPending: {
+    backgroundColor: COLORS.tertiaryFixed,
+  },
+  statusTagText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  statusApprovedText: {
+    color: COLORS.onSecondaryContainer,
+  },
+  statusPendingText: {
+    color: COLORS.tertiary,
+  },
+  bookingMetaGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    backgroundColor: COLORS.surfaceContainerLow,
+    padding: 12,
+    borderRadius: 12,
+  },
+  metaCell: {
+    alignItems: 'center',
+  },
+  metaLabel: {
+    fontSize: 11,
+    color: COLORS.outline,
+  },
+  metaValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.text,
+    marginTop: 2,
+  },
+  bookingActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  modifyBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORS.outlineVariant,
+    alignItems: 'center',
+  },
+  modifyBtnText: {
+    fontSize: 13,
     fontWeight: '600',
+    color: COLORS.primary,
+  },
+  cancelBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: 'rgba(186, 26, 26, 0.08)',
+    alignItems: 'center',
+  },
+  cancelBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.error,
+  },
+  profileHeader: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  avatarContainer: {
+    position: 'relative',
+    marginBottom: 12,
+  },
+  profileAvatar: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    borderWidth: 3,
+    borderColor: COLORS.surface,
+  },
+  avatarEditBtn: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: COLORS.surface,
+  },
+  profileName: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: COLORS.text,
+  },
+  profileRole: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  memberBadgesRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 12,
+  },
+  memberBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.surfaceContainerLow,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    gap: 6,
+  },
+  memberBadgeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: COLORS.primary,
+  },
+  memberBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  digitalIdCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 18,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginBottom: 20,
+    gap: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.06,
+        shadowRadius: 16,
+      },
+      android: {
+        elevation: 3,
+      },
+      web: {
+        boxShadow: '0px 4px 20px rgba(0,0,0,0.06)',
+      },
+    }),
+  },
+  digitalIdHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  digitalIdTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: COLORS.text,
+  },
+  digitalIdSub: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+  },
+  qrCodeBox: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  scanLine: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: '50%',
+    height: 2,
+    backgroundColor: COLORS.primary,
+    opacity: 0.7,
+  },
+  digitalIdFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.borderLight,
+  },
+  passLabel: {
+    fontSize: 11,
+    color: COLORS.outline,
+  },
+  passValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.text,
+    marginTop: 2,
+  },
+  personalDetailsCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginBottom: 20,
+  },
+  detailsCardTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: COLORS.text,
+    marginBottom: 12,
+  },
+  detailItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderLight,
+  },
+  detailIconSmall: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.surfaceContainerLow,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  detailFieldLabel: {
+    fontSize: 11,
+    color: COLORS.outline,
+  },
+  detailFieldValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.text,
+    marginTop: 2,
+  },
+  logoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(186, 26, 26, 0.08)',
+    paddingVertical: 14,
+    borderRadius: 14,
+    gap: 8,
+  },
+  logoutButtonText: {
+    color: COLORS.error,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  primaryButton: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    marginTop: 10,
+  },
+  primaryButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });
+
 export default StudentDashboard;

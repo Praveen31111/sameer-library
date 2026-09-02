@@ -2,40 +2,65 @@
  * Application Theme Colors & Design Tokens
  */
 export const COLORS = {
-  // Brand colors
-  primary: '#0d9488',       // Teal / Primary brand
-  primaryDark: '#0f766e',
-  primaryLight: '#2dd4bf',
-  primaryMuted: 'rgba(13, 148, 136, 0.15)',
-  
-  indigo: '#6366f1',
-  indigoDark: '#4f46e5',
-  
-  // Backgrounds (Dark Mode default)
-  background: '#0a0a0a',
-  surface: '#171717',
-  surfaceElevated: '#1f1f1f',
-  card: '#171717',
-  
-  // Borders
-  border: '#262626',
-  borderLight: '#404040',
-  
+  // Brand colors (Google Stitch LibReserve)
+  primary: '#00685b',
+  primaryContainer: '#008373',
+  primaryDark: '#005046',
+  primaryLight: '#65dac4',
+  primaryFixed: '#83f6e0',
+  primaryMuted: 'rgba(0, 104, 91, 0.12)',
+
+  secondary: '#006c4c',
+  secondaryContainer: '#8ef4c5',
+  onSecondaryContainer: '#00714f',
+  secondaryFixed: '#90f6c8',
+
+  tertiary: '#95442c',
+  tertiaryContainer: '#b45b42',
+  tertiaryFixed: '#ffdbd1',
+
+  indigo: '#00685b',
+  indigoDark: '#005046',
+
+  // Backgrounds (Clean modern light theme matching Stitch)
+  background: '#f5fbf8',
+  surface: '#ffffff',
+  surfaceElevated: '#ffffff',
+  surfaceBright: '#f5fbf8',
+  surfaceDim: '#d6dbd8',
+  surfaceContainerLow: '#eff5f2',
+  surfaceContainer: '#eaefec',
+  surfaceContainerHigh: '#e4e9e6',
+  surfaceContainerHighest: '#dee4e1',
+  card: '#ffffff',
+
+  // Borders & Outlines
+  border: '#dee4e1',
+  borderLight: '#eff5f2',
+  outline: '#6d7a76',
+  outlineVariant: '#bcc9c5',
+
   // Text
-  text: '#ffffff',
-  textSecondary: '#a3a3a3',
-  textMuted: '#737373',
-  textDisabled: '#525252',
-  
+  text: '#171d1b',
+  textSecondary: '#3d4946',
+  textMuted: '#6d7a76',
+  textDisabled: '#9eaba7',
+  onPrimary: '#ffffff',
+  onSurface: '#171d1b',
+  onSurfaceVariant: '#3d4946',
+
   // Status Colors
-  success: '#22c55e',
-  successBg: 'rgba(34, 197, 94, 0.15)',
-  warning: '#f59e0b',
-  warningBg: 'rgba(245, 158, 11, 0.15)',
-  danger: '#ef4444',
-  dangerBg: 'rgba(239, 68, 68, 0.15)',
-  info: '#3b82f6',
-  infoBg: 'rgba(59, 130, 246, 0.15)',
+  success: '#006c4c',
+  successBg: 'rgba(142, 244, 197, 0.4)',
+  warning: '#b45b42',
+  warningBg: 'rgba(255, 181, 160, 0.3)',
+  danger: '#ba1a1a',
+  dangerBg: 'rgba(255, 218, 214, 0.5)',
+  error: '#ba1a1a',
+  errorContainer: '#ffdad6',
+  onErrorContainer: '#93000a',
+  info: '#00685b',
+  infoBg: 'rgba(0, 104, 91, 0.12)',
 };
 
 /**

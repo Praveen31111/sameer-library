@@ -36,7 +36,7 @@ export const Drawer: React.FC<DrawerProps> = ({ visible, onClose, onNavigate }) 
                 Sameer <Text style={styles.logoHighlight}>Library</Text>
               </Text>
               <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-                <Ionicons name="close-outline" size={28} color="#ffffff" />
+                <Ionicons name="close-outline" size={28} color={COLORS.text} />
               </TouchableOpacity>
             </View>
 
@@ -46,7 +46,7 @@ export const Drawer: React.FC<DrawerProps> = ({ visible, onClose, onNavigate }) 
                 style={styles.linkItem}
                 onPress={() => handleLinkPress('Home', 'features')}
               >
-                <Ionicons name="sparkles-outline" size={22} color="#94a3b8" />
+                <Ionicons name="sparkles-outline" size={22} color={COLORS.primary} />
                 <Text style={styles.linkText}>Features</Text>
               </TouchableOpacity>
 
@@ -54,7 +54,7 @@ export const Drawer: React.FC<DrawerProps> = ({ visible, onClose, onNavigate }) 
                 style={styles.linkItem}
                 onPress={() => handleLinkPress('Home', 'about')}
               >
-                <Ionicons name="information-circle-outline" size={22} color="#94a3b8" />
+                <Ionicons name="information-circle-outline" size={22} color={COLORS.primary} />
                 <Text style={styles.linkText}>About Us</Text>
               </TouchableOpacity>
 
@@ -62,7 +62,7 @@ export const Drawer: React.FC<DrawerProps> = ({ visible, onClose, onNavigate }) 
                 style={styles.linkItem}
                 onPress={() => handleLinkPress('Home', 'contact')}
               >
-                <Ionicons name="mail-outline" size={22} color="#94a3b8" />
+                <Ionicons name="mail-outline" size={22} color={COLORS.primary} />
                 <Text style={styles.linkText}>Contact</Text>
               </TouchableOpacity>
 
@@ -152,12 +152,12 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
   },
   logoText: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: '700',
+    color: COLORS.primary,
+    fontSize: 20,
+    fontWeight: '800',
   },
   logoHighlight: {
-    color: COLORS.primary,
+    color: COLORS.secondary,
   },
   closeButton: {
     padding: 4,
@@ -174,9 +174,9 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   linkText: {
-    color: '#ffffff',
+    color: COLORS.text,
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   divider: {
     height: 1,
@@ -184,29 +184,29 @@ const styles = StyleSheet.create({
     marginVertical: 16,
   },
   loginBtn: {
-    backgroundColor: COLORS.border,
+    backgroundColor: COLORS.surfaceContainerLow,
     paddingVertical: 14,
-    borderRadius: 10,
+    borderRadius: 12,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: COLORS.borderLight,
+    borderColor: COLORS.outlineVariant,
     marginBottom: 12,
   },
   loginBtnText: {
-    color: '#ffffff',
+    color: COLORS.primary,
     fontSize: 16,
     fontWeight: '600',
   },
   registerBtn: {
     backgroundColor: COLORS.primary,
     paddingVertical: 14,
-    borderRadius: 10,
+    borderRadius: 12,
     alignItems: 'center',
   },
   registerBtnText: {
     color: '#ffffff',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   footer: {
     alignItems: 'center',

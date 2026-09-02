@@ -1,17 +1,15 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, View, TextInput, SafeAreaView, KeyboardAvoidingView, Platform, Alert, TouchableOpacity, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Button } from '../components/Button';
-
 import { apiRequest } from '../services/api';
+import { COLORS } from '../utils/constants';
 
 interface RegisterScreenProps {
-  onNavigate: (screen: 'Home' | 'Login' | 'Register') => void;
+  onNavigate: (screen: 'Home' | 'Login' | 'Register' | 'StudentDashboard' | 'AdminDashboard') => void;
 }
 
 export const RegisterScreen: React.FC<RegisterScreenProps> = ({ onNavigate }) => {
   const [activeTab, setActiveTab] = useState<'student' | 'admin'>('student');
-  const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
 
   // Form States
@@ -19,45 +17,28 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ onNavigate }) =>
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [adminCode, setAdminCode] = useState(''); // Extra field for Admin register
-
-  const handleNextStep = () => {
-    if (!name || !email || !phone) {
-      Alert.alert('Error', 'Please fill in all personal details.');
-      return;
-    }
-    // Simple email validation regex
-    const emailRegex = /\S+@\S+\.\S+/;
-    if (!emailRegex.test(email)) {
-      Alert.alert('Error', 'Please enter a valid email address.');
-      return;
-    }
-    if (phone.trim().length < 10) {
-      Alert.alert('Error', 'Please enter a valid 10-digit mobile number.');
-      return;
-    }
-    setStep(2);
-  };
+  const [showPassword, setShowPassword] = useState(false);
+  const [adminCode, setAdminCode] = useState('');
 
   const handleSubmit = async () => {
-    if (!password || !confirmPassword) {
-      Alert.alert('Error', 'Please enter password and confirm password.');
+    if (!name.trim()) {
+      Alert.alert('Required Field', 'Please enter your full name.');
       return;
     }
-
-    if (password.length < 8) {
-      Alert.alert('Error', 'Password must be at least 8 characters long.');
+    if (!email.trim() || !/\S+@\S+\.\S+/.test(email)) {
+      Alert.alert('Invalid Email', 'Please enter a valid email address.');
       return;
     }
-
-    if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match.');
+    if (!phone.trim() || phone.trim().length < 10) {
+      Alert.alert('Invalid Phone', 'Please enter a valid 10-digit mobile number.');
       return;
     }
-
+    if (!password || password.length < 8) {
+      Alert.alert('Password Too Short', 'Password must be at least 8 characters.');
+      return;
+    }
     if (activeTab === 'admin' && !adminCode) {
-      Alert.alert('Error', 'Admin passcode is required to register as an administrator.');
+      Alert.alert('Passcode Required', 'Admin authorization code is required.');
       return;
     }
 
@@ -77,7 +58,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ onNavigate }) =>
       if (res.success || res.user) {
         Alert.alert(
           'Registration Success 🎉',
-          `Account created successfully for ${name}! Please sign in now with your email and password.`,
+          `Account created successfully for ${name}! Please sign in now with your credentials.`,
           [{ text: 'Sign In Now', onPress: () => onNavigate('Login') }]
         );
       } else {
@@ -89,196 +70,166 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ onNavigate }) =>
     }
   };
 
-  const handleGoogleSignup = () => {
-    setLoading(true);
-    // Simulate google signup
-    setTimeout(() => {
-      setLoading(false);
-      Alert.alert('Success', 'Google Account linked successfully!', [
-        { text: 'Proceed', onPress: () => onNavigate('Login') }
-      ]);
-    }, 1200);
-  };
-
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.keyboardView}
       >
-        <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
-          {/* Back to Home Header */}
-          <TouchableOpacity style={styles.backButton} onPress={() => onNavigate('Home')}>
-            <Ionicons name="arrow-back-outline" size={24} color="#ffffff" />
-            <Text style={styles.backButtonText}>Back to Home</Text>
-          </TouchableOpacity>
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          {/* Top Bar with Back Button */}
+          <View style={styles.topBar}>
+            <TouchableOpacity style={styles.backButton} onPress={() => onNavigate('Home')} activeOpacity={0.7}>
+              <Ionicons name="arrow-back" size={22} color={COLORS.text} />
+            </TouchableOpacity>
+            <Text style={styles.topBarBrand}>LibReserve</Text>
+            <View style={{ width: 40 }} />
+          </View>
 
-          {/* Logo */}
-          <View style={styles.logoContainer}>
-            <View style={styles.logoIcon}>
-              <Ionicons name="book" size={24} color="white" />
-            </View>
-            <Text style={styles.logoText}>
-              Sameer <Text style={styles.logoHighlight}>Library</Text>
+          {/* Heading Section */}
+          <View style={styles.headerSection}>
+            <Text style={styles.title}>Create Account</Text>
+            <Text style={styles.subtitle}>
+              Join LibReserve to book your preferred study space effortlessly.
             </Text>
           </View>
 
-          {/* Card */}
+          {/* Form Card */}
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Create account</Text>
-            <Text style={styles.cardSubtitle}>Join our study community</Text>
-
-            {/* Sliding Tabs */}
+            {/* Account Type Selector */}
             <View style={styles.tabsContainer}>
               <TouchableOpacity
                 style={[styles.tab, activeTab === 'student' && styles.activeTab]}
-                onPress={() => {
-                  setActiveTab('student');
-                  setStep(1);
-                }}
+                onPress={() => setActiveTab('student')}
+                activeOpacity={0.8}
               >
                 <Text style={[styles.tabText, activeTab === 'student' && styles.activeTabText]}>Student</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.tab, activeTab === 'admin' && styles.activeTab]}
-                onPress={() => {
-                  setActiveTab('admin');
-                  setStep(1);
-                }}
+                onPress={() => setActiveTab('admin')}
+                activeOpacity={0.8}
               >
                 <Text style={[styles.tabText, activeTab === 'admin' && styles.activeTabText]}>Admin</Text>
               </TouchableOpacity>
             </View>
 
-            {/* Google Signup for Students only */}
-            {activeTab === 'student' && step === 1 && (
-              <>
-                <TouchableOpacity style={styles.googleButton} onPress={handleGoogleSignup}>
-                  <Ionicons name="logo-google" size={18} color="#000000" style={styles.googleIcon} />
-                  <Text style={styles.googleButtonText}>Continue with Google</Text>
-                </TouchableOpacity>
-
-                <View style={styles.dividerRow}>
-                  <View style={styles.dividerLine} />
-                  <Text style={styles.dividerText}>or</Text>
-                  <View style={styles.dividerLine} />
-                </View>
-              </>
-            )}
-
-            {/* Progress Step Bar */}
-            <View style={styles.progressBar}>
-              <View style={[styles.progressSegment, step >= 1 && styles.progressActive]} />
-              <View style={[styles.progressSegment, step >= 2 && styles.progressActive]} />
+            {/* Field: Full Name */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Full Name</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Praveen Sharma"
+                placeholderTextColor={COLORS.outline}
+                value={name}
+                onChangeText={setName}
+              />
             </View>
 
-            {/* Multi-step Forms */}
-            {step === 1 ? (
-              <View style={styles.form}>
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Full Name</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="John Doe"
-                    placeholderTextColor="#525252"
-                    value={name}
-                    onChangeText={setName}
-                  />
+            {/* Field: Mobile Number */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Mobile Number</Text>
+              <View style={styles.phoneInputRow}>
+                <View style={styles.prefixBox}>
+                  <Text style={styles.prefixText}>+91</Text>
                 </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Email Address</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="john@example.com"
-                    placeholderTextColor="#525252"
-                    value={email}
-                    onChangeText={setEmail}
-                    autoCapitalize="none"
-                    keyboardType="email-address"
-                  />
-                </View>
-
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Phone Number</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="+91 99999 99999"
-                    placeholderTextColor="#525252"
-                    value={phone}
-                    onChangeText={phoneVal => setPhone(phoneVal)}
-                    keyboardType="phone-pad"
-                  />
-                </View>
-
-                <Button
-                  title="Continue"
-                  onPress={handleNextStep}
-                  style={styles.actionButton}
+                <TextInput
+                  style={[styles.input, styles.phoneInput]}
+                  placeholder="9876543210"
+                  placeholderTextColor={COLORS.outline}
+                  value={phone}
+                  onChangeText={setPhone}
+                  keyboardType="phone-pad"
+                  maxLength={10}
                 />
               </View>
-            ) : (
-              <View style={styles.form}>
-                {activeTab === 'admin' && (
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Admin Passcode</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Enter Admin Invite Code"
-                      placeholderTextColor="#525252"
-                      value={adminCode}
-                      onChangeText={setAdminCode}
-                      autoCapitalize="none"
-                    />
-                  </View>
-                )}
+            </View>
 
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Password</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Create password"
-                    placeholderTextColor="#525252"
-                    value={password}
-                    onChangeText={setPassword}
-                    secureTextEntry
-                    autoCapitalize="none"
-                  />
-                </View>
+            {/* Field: Email */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Email Address</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="praveen@university.edu"
+                placeholderTextColor={COLORS.outline}
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+            </View>
 
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Confirm Password</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Repeat password"
-                    placeholderTextColor="#525252"
-                    value={confirmPassword}
-                    onChangeText={setConfirmPassword}
-                    secureTextEntry
-                    autoCapitalize="none"
-                  />
-                </View>
+            {/* Field: Password */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Password</Text>
+              <View style={styles.inputWrapper}>
+                <TextInput
+                  style={[styles.input, { paddingRight: 44 }]}
+                  placeholder="••••••••"
+                  placeholderTextColor={COLORS.outline}
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                />
+                <TouchableOpacity 
+                  style={styles.eyeButton} 
+                  onPress={() => setShowPassword(!showPassword)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color={COLORS.outline} />
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.helperText}>Must be at least 8 characters.</Text>
+            </View>
 
-                <View style={styles.buttonRow}>
-                  <TouchableOpacity
-                    style={styles.backStepButton}
-                    onPress={() => setStep(1)}
-                    disabled={loading}
-                  >
-                    <Text style={styles.backStepButtonText}>Back</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.submitStepButton, loading && styles.buttonDisabled]}
-                    onPress={handleSubmit}
-                    disabled={loading}
-                  >
-                    <Text style={styles.submitStepButtonText}>
-                      {loading ? 'Creating...' : 'Register'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
+            {/* Field: Admin Passcode (If admin selected) */}
+            {activeTab === 'admin' && (
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Admin Passcode</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter secret invite code"
+                  placeholderTextColor={COLORS.outline}
+                  value={adminCode}
+                  onChangeText={setAdminCode}
+                  secureTextEntry
+                />
               </View>
             )}
+
+            {/* Submit Button */}
+            <TouchableOpacity 
+              style={styles.submitButton} 
+              onPress={handleSubmit}
+              disabled={loading}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.submitButtonText}>
+                {loading ? 'Creating Account...' : 'Create Account'}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Divider */}
+            <View style={styles.dividerRow}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>OR</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            {/* Continue with Google */}
+            <TouchableOpacity
+              style={styles.googleButton}
+              onPress={() => {
+                Alert.alert('Google Sign Up', 'Please use Sign In screen to authenticate with your Google account.', [
+                  { text: 'Go to Sign In', onPress: () => onNavigate('Login') }
+                ]);
+              }}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="logo-google" size={18} color="#4285F4" />
+              <Text style={styles.googleButtonText}>Continue with Google</Text>
+            </TouchableOpacity>
           </View>
 
           {/* Footer */}
@@ -286,7 +237,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ onNavigate }) =>
             <Text style={styles.footerText}>
               Already have an account?{' '}
               <Text style={styles.signinLink} onPress={() => onNavigate('Login')}>
-                Sign In
+                Sign in
               </Text>
             </Text>
           </View>
@@ -299,229 +250,242 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ onNavigate }) =>
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0a0a0a',
+    backgroundColor: COLORS.background,
   },
   keyboardView: {
     flex: 1,
   },
-  scrollContainer: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 40,
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingBottom: 40,
+  },
+  topBar: {
+    height: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
   },
   backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    alignSelf: 'flex-start',
-    marginBottom: 20,
-    marginTop: 20,
-  },
-  backButtonText: {
-    color: '#ffffff',
-    fontSize: 15,
-    fontWeight: '500',
-  },
-  logoContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 24,
-  },
-  logoIcon: {
     width: 40,
     height: 40,
-    backgroundColor: '#0d9488',
-    borderRadius: 10,
+    borderRadius: 20,
+    backgroundColor: COLORS.surfaceContainerLow,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
   },
-  logoText: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#ffffff',
+  topBarBrand: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: COLORS.primary,
+  },
+  headerSection: {
+    marginBottom: 20,
+    marginTop: 4,
+  },
+  title: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: COLORS.text,
     letterSpacing: -0.5,
+    marginBottom: 6,
   },
-  logoHighlight: {
-    color: '#0d9488',
+  subtitle: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    lineHeight: 20,
   },
   card: {
-    backgroundColor: '#171717',
-    borderRadius: 16,
+    backgroundColor: COLORS.surface,
+    borderRadius: 18,
+    padding: 20,
     borderWidth: 1,
-    borderColor: '#262626',
-    padding: 24,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 4,
-  },
-  cardTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#ffffff',
-    textAlign: 'center',
-  },
-  cardSubtitle: {
-    fontSize: 14,
-    color: '#a3a3a3',
-    textAlign: 'center',
-    marginTop: 4,
-    marginBottom: 20,
+    borderColor: COLORS.border,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.04,
+        shadowRadius: 16,
+      },
+      android: {
+        elevation: 2,
+      },
+      web: {
+        boxShadow: '0px 4px 20px rgba(0,0,0,0.04)',
+      },
+    }),
   },
   tabsContainer: {
     flexDirection: 'row',
-    backgroundColor: '#262626',
-    borderRadius: 10,
+    backgroundColor: COLORS.surfaceContainerLow,
+    borderRadius: 12,
     padding: 4,
-    marginBottom: 20,
+    marginBottom: 18,
   },
   tab: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: 9,
     alignItems: 'center',
-    borderRadius: 8,
+    borderRadius: 10,
   },
   activeTab: {
-    backgroundColor: '#171717',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 1,
+    backgroundColor: COLORS.surface,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.08,
+        shadowRadius: 3,
+      },
+      android: {
+        elevation: 2,
+      },
+      web: {
+        boxShadow: '0px 1px 4px rgba(0,0,0,0.08)',
+      },
+    }),
   },
   tabText: {
-    color: '#a3a3a3',
     fontSize: 14,
     fontWeight: '600',
+    color: COLORS.textSecondary,
   },
   activeTabText: {
-    color: '#ffffff',
+    color: COLORS.primary,
+    fontWeight: '700',
   },
-  googleButton: {
-    flexDirection: 'row',
-    backgroundColor: '#ffffff',
-    width: '100%',
-    paddingVertical: 14,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
+  inputGroup: {
     marginBottom: 16,
   },
-  googleIcon: {
-    marginTop: 2,
-  },
-  googleButtonText: {
-    color: '#000000',
-    fontSize: 16,
+  label: {
+    fontSize: 13,
     fontWeight: '600',
+    color: COLORS.outline,
+    marginBottom: 6,
+  },
+  phoneInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  prefixBox: {
+    backgroundColor: COLORS.surfaceContainerLow,
+    borderWidth: 1,
+    borderRightWidth: 0,
+    borderColor: COLORS.outlineVariant,
+    borderTopLeftRadius: 12,
+    borderBottomLeftRadius: 12,
+    paddingHorizontal: 12,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  prefixText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+  },
+  phoneInput: {
+    flex: 1,
+    borderTopLeftRadius: 0,
+    borderBottomLeftRadius: 0,
+  },
+  inputWrapper: {
+    position: 'relative',
+    justifyContent: 'center',
+  },
+  input: {
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.outlineVariant,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: COLORS.text,
+    height: 48,
+  },
+  eyeButton: {
+    position: 'absolute',
+    right: 12,
+    padding: 6,
+  },
+  helperText: {
+    fontSize: 11,
+    color: COLORS.outline,
+    marginTop: 4,
+  },
+  submitButton: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 10,
+    ...Platform.select({
+      ios: {
+        shadowColor: COLORS.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 3,
+      },
+      web: {
+        boxShadow: '0px 4px 14px rgba(0, 104, 91, 0.2)',
+      },
+    }),
+  },
+  submitButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '700',
   },
   dividerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    marginBottom: 16,
+    marginVertical: 18,
+    gap: 12,
   },
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#262626',
+    backgroundColor: COLORS.outlineVariant,
+    opacity: 0.5,
   },
   dividerText: {
-    color: '#a3a3a3',
     fontSize: 12,
+    color: COLORS.outline,
+    letterSpacing: 0.5,
   },
-  progressBar: {
+  googleButton: {
     flexDirection: 'row',
-    gap: 8,
-    marginBottom: 20,
-  },
-  progressSegment: {
-    flex: 1,
-    height: 3,
-    backgroundColor: '#262626',
-    borderRadius: 2,
-  },
-  progressActive: {
-    backgroundColor: '#0d9488',
-  },
-  form: {
-    width: '100%',
-  },
-  inputGroup: {
-    marginBottom: 14,
-  },
-  label: {
-    fontSize: 14,
-    color: '#a3a3a3',
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  input: {
-    backgroundColor: '#262626',
-    color: '#ffffff',
-    borderRadius: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    fontSize: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.surface,
     borderWidth: 1,
-    borderColor: '#404040',
-  },
-  actionButton: {
-    backgroundColor: '#0d9488',
-    marginTop: 10,
-  },
-  buttonRow: {
-    flexDirection: 'row',
+    borderColor: COLORS.outlineVariant,
+    borderRadius: 12,
+    paddingVertical: 13,
     gap: 10,
-    marginTop: 10,
   },
-  backStepButton: {
-    flex: 1,
-    backgroundColor: '#262626',
-    paddingVertical: 14,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#404040',
-  },
-  backStepButtonText: {
-    color: '#ffffff',
-    fontSize: 15,
+  googleButtonText: {
+    fontSize: 14,
     fontWeight: '600',
-  },
-  submitStepButton: {
-    flex: 2,
-    backgroundColor: '#0d9488',
-    paddingVertical: 14,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  submitStepButtonText: {
-    color: '#ffffff',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  buttonDisabled: {
-    opacity: 0.6,
+    color: COLORS.text,
   },
   footer: {
-    alignItems: 'center',
     marginTop: 24,
+    alignItems: 'center',
   },
   footerText: {
-    color: '#525252',
     fontSize: 14,
+    color: COLORS.textSecondary,
   },
   signinLink: {
-    color: '#0d9488',
-    fontWeight: '600',
+    color: COLORS.primary,
+    fontWeight: '700',
   },
 });
+
 export default RegisterScreen;
