@@ -5,11 +5,13 @@ import { z } from "zod";
 
 const registerSchema = z.object({
     name: z.string().min(2),
-    email: z.email(),
+    email: z.string().email(),
     phone: z.string().min(10),
     password: z.string().min(8),
     college: z.string().optional(),
     course: z.string().optional(),
+    role: z.enum(["STUDENT", "ADMIN"]).optional(),
+    adminCode: z.string().optional(),
 });
 
 export const dynamic = 'force-dynamic';
@@ -32,6 +34,19 @@ export async function POST(request: Request) {
             );
         }
 
+        // Determine user role
+        let userRole = "STUDENT";
+        if (data.role === "ADMIN") {
+            const validCodes = ["sameer7518", "SAMEER7518", "ADMIN2025"];
+            if (!data.adminCode || !validCodes.includes(data.adminCode.trim())) {
+                return NextResponse.json(
+                    { error: "Invalid Admin authorization code. Contact the library owner." },
+                    { status: 403 }
+                );
+            }
+            userRole = "ADMIN";
+        }
+
         // Create user
         const passwordHash = await hashPassword(data.password);
         const user = await prisma.user.create({
@@ -42,8 +57,8 @@ export async function POST(request: Request) {
                 passwordHash,
                 college: data.college,
                 course: data.course,
-                role: "STUDENT",
-                status: "ACTIVE", // For demo; should be PENDING_VERIFICATION in production
+                role: userRole,
+                status: "ACTIVE",
             },
         });
 
@@ -57,6 +72,7 @@ export async function POST(request: Request) {
         const response = NextResponse.json(
             {
                 success: true,
+                token: token,
                 user: {
                     id: user.id,
                     name: user.name,

@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { StyleSheet, Text, View, TextInput, SafeAreaView, KeyboardAvoidingView, Platform, Alert, TouchableOpacity, ScrollView, StatusBar } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, Text, View, TextInput, SafeAreaView, KeyboardAvoidingView, Platform, Alert, TouchableOpacity, ScrollView, StatusBar, BackHandler } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { apiRequest } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import { COLORS } from '../utils/constants';
 
 interface RegisterScreenProps {
@@ -9,6 +10,7 @@ interface RegisterScreenProps {
 }
 
 export const RegisterScreen: React.FC<RegisterScreenProps> = ({ onNavigate }) => {
+  const { login } = useAuth();
   const [activeTab, setActiveTab] = useState<'student' | 'admin'>('student');
   const [loading, setLoading] = useState(false);
 
@@ -20,6 +22,16 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ onNavigate }) =>
   const [showPassword, setShowPassword] = useState(false);
   const [adminCode, setAdminCode] = useState('');
 
+  // Hardware Back Button Handler for Android
+  useEffect(() => {
+    const onBackPress = () => {
+      onNavigate('Login');
+      return true;
+    };
+    const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => sub.remove();
+  }, [onNavigate]);
+
   const handleSubmit = async () => {
     if (!name.trim()) {
       Alert.alert('Required Field', 'Please enter your full name.');
@@ -29,16 +41,17 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ onNavigate }) =>
       Alert.alert('Invalid Email', 'Please enter a valid email address.');
       return;
     }
-    if (!phone.trim() || phone.trim().length < 10) {
+    const cleanedPhone = phone.replace(/\D/g, '');
+    if (!cleanedPhone || cleanedPhone.length < 10) {
       Alert.alert('Invalid Phone', 'Please enter a valid 10-digit mobile number.');
       return;
     }
     if (!password || password.length < 8) {
-      Alert.alert('Password Too Short', 'Password must be at least 8 characters.');
+      Alert.alert('Password Too Short', 'Password must be at least 8 characters long.');
       return;
     }
-    if (activeTab === 'admin' && !adminCode) {
-      Alert.alert('Passcode Required', 'Admin authorization code is required.');
+    if (activeTab === 'admin' && !adminCode.trim()) {
+      Alert.alert('Passcode Required', 'Admin authorization secret code is required.');
       return;
     }
 
@@ -49,24 +62,35 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ onNavigate }) =>
         body: JSON.stringify({
           name: name.trim(),
           email: email.trim().toLowerCase(),
-          phone: phone.trim(),
+          phone: cleanedPhone,
           password,
+          role: activeTab === 'admin' ? 'ADMIN' : 'STUDENT',
+          adminCode: activeTab === 'admin' ? adminCode.trim() : undefined,
         }),
       });
 
       setLoading(false);
-      if (res.success || res.user) {
-        Alert.alert(
-          'Registration Success 🎉',
-          `Account created successfully for ${name}! Please sign in now with your credentials.`,
-          [{ text: 'Sign In Now', onPress: () => onNavigate('Login') }]
-        );
+      if (res.success && res.user) {
+        if (res.token) {
+          await login(res.token, res.user);
+          Alert.alert(
+            'Account Created 🎉',
+            `Welcome to Sameer Library, ${res.user.name}!`,
+            [{ text: 'Continue to Dashboard', onPress: () => onNavigate(res.user.role === 'ADMIN' || res.user.role === 'OWNER' ? 'AdminDashboard' : 'StudentDashboard') }]
+          );
+        } else {
+          Alert.alert(
+            'Registration Success 🎉',
+            `Account created successfully for ${name}! Please sign in now with your password.`,
+            [{ text: 'Sign In Now', onPress: () => onNavigate('Login') }]
+          );
+        }
       } else {
         Alert.alert('Registration Failed', res.error || 'Could not create account. Email or phone might already exist.');
       }
     } catch (error: any) {
       setLoading(false);
-      Alert.alert('Error', error.message || 'Could not connect to the registration server.');
+      Alert.alert('Registration Error', error.message || 'Could not connect to the registration server.');
     }
   };
 
@@ -81,7 +105,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ onNavigate }) =>
           <View style={styles.topBar}>
             <TouchableOpacity 
               style={styles.backButton} 
-              onPress={() => onNavigate('Home')} 
+              onPress={() => onNavigate('Login')} 
               activeOpacity={0.7}
               hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
             >
@@ -124,7 +148,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ onNavigate }) =>
               <Text style={styles.label}>Full Name</Text>
               <TextInput
                 style={styles.input}
-                placeholder="Praveen Sharma"
+                placeholder="Enter your full name"
                 placeholderTextColor={COLORS.outline}
                 value={name}
                 onChangeText={setName}
@@ -155,7 +179,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ onNavigate }) =>
               <Text style={styles.label}>Email Address</Text>
               <TextInput
                 style={styles.input}
-                placeholder="praveen@university.edu"
+                placeholder="student@example.com"
                 placeholderTextColor={COLORS.outline}
                 value={email}
                 onChangeText={setEmail}
