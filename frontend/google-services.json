@@ -14,11 +14,11 @@
       },
       "oauth_client": [
         {
-          "client_id": "560988320829-31goecj69287hpnbbm0vhuhrt6bjbl2v.apps.googleusercontent.com",
+          "client_id": "560988320829-mi5quooj0ks26lirni8uedhosib594ho.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.praveen.sameerlibrary",
-            "certificate_hash": "87488eb191dc6b30915b86d69b862181de3a2a2a"
+            "certificate_hash": "07fe5e2d4b951aa6aa2510d26679cdd992094b93"
           }
         },
         {
