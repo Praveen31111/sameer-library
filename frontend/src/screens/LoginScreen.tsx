@@ -9,6 +9,8 @@ import { apiRequest } from '../services/api';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
 
+import * as AuthSession from 'expo-auth-session';
+
 WebBrowser.maybeCompleteAuthSession();
 
 interface LoginScreenProps {
@@ -18,6 +20,9 @@ interface LoginScreenProps {
 const GOOGLE_ANDROID_CLIENT_ID = '560988320829-31goecj69287hpnbbm0vhuhrt6bjbl2v.apps.googleusercontent.com';
 const GOOGLE_WEB_CLIENT_ID = '560988320829-vn69cuihidkuvrt3cqhv62av9s1ja5sm.apps.googleusercontent.com';
 
+// Reversed client ID scheme matching app.json intentFilter
+const ANDROID_REDIRECT_URI = 'com.googleusercontent.apps.560988320829-31goecj69287hpnbbm0vhuhrt6bjbl2v:/oauthredirect';
+
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigate }) => {
   const { login } = useAuth();
   const [activeTab, setActiveTab] = useState<'student' | 'admin'>('student');
@@ -25,17 +30,29 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigate }) => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const redirectUri = AuthSession.makeRedirectUri({
+    native: ANDROID_REDIRECT_URI,
+  });
 
   const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
+    clientId: GOOGLE_WEB_CLIENT_ID,
     androidClientId: GOOGLE_ANDROID_CLIENT_ID,
     webClientId: GOOGLE_WEB_CLIENT_ID,
+    redirectUri,
   });
 
   useEffect(() => {
     if (response?.type === 'success') {
-      const { id_token } = response.params;
-      if (id_token) {
-        verifyGoogleTokenAndLogin(id_token);
+      const idToken = response.params?.id_token || (response as any).authentication?.idToken;
+      const accessToken = (response as any).authentication?.accessToken;
+
+      if (idToken) {
+        verifyGoogleTokenAndLogin(idToken);
+      } else if (accessToken) {
+        fetchUserInfoAndLogin(accessToken);
+      } else {
+        setLoading(false);
+        Alert.alert('Sign-In Error', 'No authorization token returned from Google.');
       }
     } else if (response?.type === 'error') {
       setLoading(false);
@@ -44,6 +61,45 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigate }) => {
       setLoading(false);
     }
   }, [response]);
+
+  const fetchUserInfoAndLogin = async (accessToken: string) => {
+    setLoading(true);
+    try {
+      const userRes = await fetch('https://www.googleapis.com/userinfo/v2/me', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const userInfo = await userRes.json();
+
+      if (userInfo?.email) {
+        const res = await apiRequest('/auth/google', {
+          method: 'POST',
+          body: JSON.stringify({
+            email: userInfo.email,
+            directEmail: userInfo.email,
+            name: userInfo.name || 'Google Student',
+            directName: userInfo.name || 'Google Student',
+            picture: userInfo.picture,
+            directPicture: userInfo.picture,
+            token: accessToken,
+          }),
+        });
+
+        setLoading(false);
+        if (res.success && res.token && res.user) {
+          await login(res.token, res.user);
+          Alert.alert('Success', `Welcome, ${res.user.name}!`);
+          onNavigate('Home');
+        } else {
+          Alert.alert('Authentication Failed', res.error || 'Could not sign in with Google.');
+        }
+      } else {
+        throw new Error('Could not fetch user profile from Google.');
+      }
+    } catch (error: any) {
+      setLoading(false);
+      Alert.alert('Google Auth Error', error.message || 'Failed to authenticate with Google profile.');
+    }
+  };
 
   const verifyGoogleTokenAndLogin = async (idToken: string) => {
     setLoading(true);

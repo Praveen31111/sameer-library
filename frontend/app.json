@@ -2,6 +2,7 @@
   "expo": {
     "name": "Sameer Library",
     "slug": "sameer-library-mobile",
+    "scheme": "sameerlibrary",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -20,11 +21,15 @@
       "intentFilters": [
         {
           "action": "VIEW",
-          "autoVerify": true,
           "data": [
             {
-              "scheme": "com.googleusercontent.apps.560988320829-31goecj69287hpnbbm0vhuhrt6bjbl2v",
-              "path": "/oauth2redirect/google"
+              "scheme": "com.googleusercontent.apps.560988320829-31goecj69287hpnbbm0vhuhrt6bjbl2v"
+            },
+            {
+              "scheme": "com.praveen.sameerlibrary"
+            },
+            {
+              "scheme": "sameerlibrary"
             }
           ],
           "category": ["BROWSABLE", "DEFAULT"]
