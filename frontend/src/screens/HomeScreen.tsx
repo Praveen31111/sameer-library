@@ -1,10 +1,11 @@
-import React, { useState, useRef } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Alert, Dimensions, Image, Platform } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Alert, Dimensions, Image, Platform, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Navbar } from '../components/Navbar';
 import { Drawer } from '../components/Drawer';
 import { BottomNavBar, BottomNavTab } from '../components/BottomNavBar';
 import { useAuth } from '../context/AuthContext';
+import { apiRequest } from '../services/api';
 import { COLORS } from '../utils/constants';
 
 interface HomeScreenProps {
@@ -18,6 +19,27 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [activeBottomTab, setActiveBottomTab] = useState<BottomNavTab>('Home');
   
+  // Dynamic Branches from Database
+  const [branches, setBranches] = useState<any[]>([]);
+  const [loadingBranches, setLoadingBranches] = useState<boolean>(true);
+
+  // Fetch real libraries dynamically from DB
+  useEffect(() => {
+    const fetchRealBranches = async () => {
+      try {
+        const res = await apiRequest('/branches');
+        if (res?.branches && Array.isArray(res.branches)) {
+          setBranches(res.branches);
+        }
+      } catch (err: any) {
+        console.warn('Failed to load branches on HomeScreen:', err?.message || err);
+      } finally {
+        setLoadingBranches(false);
+      }
+    };
+    fetchRealBranches();
+  }, []);
+
   // Interactive seat grid state
   const [selectedSeat, setSelectedSeat] = useState<string | null>('B1');
   const bookedSeats = ['A3', 'A4', 'C1', 'C2', 'D3', 'D4'];
@@ -178,97 +200,99 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
           </TouchableOpacity>
         </View>
 
-        {/* Featured Spaces (Bento Grid Style from Stitch) */}
+        {/* Featured Spaces (Real Live Libraries from DB) */}
         <View style={styles.sectionContainer}>
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionHeaderTitle}>Featured Spaces</Text>
+            <View>
+              <Text style={styles.sectionHeaderTitle}>Featured Spaces</Text>
+              <Text style={styles.sectionHeaderSub}>Real-time libraries & verified branches</Text>
+            </View>
             <TouchableOpacity 
               onPress={() => {
-                if (user) onNavigate('StudentDashboard');
+                if (user) onNavigate(user.role === 'ADMIN' || user.role === 'OWNER' ? 'AdminDashboard' : 'StudentDashboard');
                 else onNavigate('Register');
               }}
               style={styles.viewAllBtn}
             >
-              <Text style={styles.viewAllText}>View all</Text>
+              <Text style={styles.viewAllText}>Book now</Text>
               <Ionicons name="chevron-forward" size={14} color={COLORS.primary} />
             </TouchableOpacity>
           </View>
 
-          {/* Space Card 1 */}
-          <TouchableOpacity 
-            style={styles.spaceCard}
-            activeOpacity={0.9}
-            onPress={() => {
-              if (user) onNavigate('StudentDashboard');
-              else onNavigate('Register');
-            }}
-          >
-            <View style={styles.spaceImageContainer}>
-              <Image 
-                source={{ uri: 'https://images.unsplash.com/photo-1521587760476-6c12a4b040da?auto=format&fit=crop&w=800&q=80' }}
-                style={styles.spaceImage}
-              />
-              <View style={styles.ratingBadge}>
-                <Ionicons name="star" size={14} color={COLORS.primary} />
-                <Text style={styles.ratingText}>4.8</Text>
-              </View>
+          {loadingBranches ? (
+            <View style={styles.branchesLoadingBox}>
+              <ActivityIndicator size="small" color={COLORS.primary} />
+              <Text style={styles.branchesLoadingText}>Loading verified libraries...</Text>
             </View>
-            <View style={styles.spaceCardBody}>
-              <Text style={styles.spaceName}>Central City Library</Text>
-              <View style={styles.spaceLocationRow}>
-                <Ionicons name="location-outline" size={16} color={COLORS.textSecondary} />
-                <Text style={styles.spaceLocationText}>Downtown District, 1.2mi</Text>
-              </View>
-              <View style={styles.spaceFooterRow}>
-                <View style={styles.seatPill}>
-                  <View style={styles.seatPillDot} />
-                  <Text style={styles.seatPillText}>42 Seats Left</Text>
-                </View>
-                <View style={styles.amenityItem}>
-                  <Ionicons name="wifi-outline" size={16} color={COLORS.outline} />
-                  <Text style={styles.amenityText}>Fast Wi-Fi</Text>
-                </View>
-              </View>
+          ) : branches.length === 0 ? (
+            <View style={styles.emptyBranchesCard}>
+              <Ionicons name="business-outline" size={36} color={COLORS.outline} />
+              <Text style={styles.emptyBranchesTitle}>No Libraries Added Yet</Text>
+              <Text style={styles.emptyBranchesSub}>Libraries added by Admin will automatically appear here.</Text>
             </View>
-          </TouchableOpacity>
+          ) : (
+            branches.map((branch, index) => {
+              const defaultPhotos = [
+                'https://images.unsplash.com/photo-1521587760476-6c12a4b040da?auto=format&fit=crop&w=800&q=80',
+                'https://images.unsplash.com/photo-1497633762265-9d179a990aa6?auto=format&fit=crop&w=800&q=80',
+                'https://images.unsplash.com/photo-1568667256549-094345857637?auto=format&fit=crop&w=800&q=80',
+              ];
+              const branchPhoto = branch.photo || defaultPhotos[index % defaultPhotos.length];
+              const totalSeats = branch.totalSeats || (branch.rooms ? branch.rooms.reduce((s: number, r: any) => s + (r.seatCount || r.capacity || 0), 0) : 0);
+              const roomCount = branch.roomCount || (branch.rooms ? branch.rooms.length : 0);
 
-          {/* Space Card 2 */}
-          <TouchableOpacity 
-            style={styles.spaceCard}
-            activeOpacity={0.9}
-            onPress={() => {
-              if (user) onNavigate('StudentDashboard');
-              else onNavigate('Register');
-            }}
-          >
-            <View style={styles.spaceImageContainer}>
-              <Image 
-                source={{ uri: 'https://images.unsplash.com/photo-1497633762265-9d179a990aa6?auto=format&fit=crop&w=800&q=80' }}
-                style={styles.spaceImage}
-              />
-              <View style={styles.ratingBadge}>
-                <Ionicons name="star" size={14} color={COLORS.primary} />
-                <Text style={styles.ratingText}>4.5</Text>
-              </View>
-            </View>
-            <View style={styles.spaceCardBody}>
-              <Text style={styles.spaceName}>Westside Branch</Text>
-              <View style={styles.spaceLocationRow}>
-                <Ionicons name="location-outline" size={16} color={COLORS.textSecondary} />
-                <Text style={styles.spaceLocationText}>West End, 2.5mi</Text>
-              </View>
-              <View style={styles.spaceFooterRow}>
-                <View style={[styles.seatPill, { backgroundColor: COLORS.surfaceContainerHighest }]}>
-                  <View style={[styles.seatPillDot, { backgroundColor: COLORS.outline }]} />
-                  <Text style={[styles.seatPillText, { color: COLORS.textSecondary }]}>12 Seats Left</Text>
-                </View>
-                <View style={styles.amenityItem}>
-                  <Ionicons name="cafe-outline" size={16} color={COLORS.outline} />
-                  <Text style={styles.amenityText}>Cafe Inside</Text>
-                </View>
-              </View>
-            </View>
-          </TouchableOpacity>
+              return (
+                <TouchableOpacity 
+                  key={branch.id || index}
+                  style={styles.spaceCard}
+                  activeOpacity={0.9}
+                  onPress={() => {
+                    if (user) onNavigate(user.role === 'ADMIN' || user.role === 'OWNER' ? 'AdminDashboard' : 'StudentDashboard');
+                    else onNavigate('Register');
+                  }}
+                >
+                  <View style={styles.spaceImageContainer}>
+                    <Image 
+                      source={{ uri: branchPhoto }}
+                      style={styles.spaceImage}
+                    />
+                    <View style={styles.ratingBadge}>
+                      <Ionicons name="star" size={13} color={COLORS.primary} />
+                      <Text style={styles.ratingText}>4.9</Text>
+                    </View>
+                    {branch.code ? (
+                      <View style={styles.branchCodeBadge}>
+                        <Text style={styles.branchCodeText}>Branch #{branch.code}</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                  <View style={styles.spaceCardBody}>
+                    <Text style={styles.spaceName}>{branch.name}</Text>
+                    <View style={styles.spaceLocationRow}>
+                      <Ionicons name="location-outline" size={16} color={COLORS.textSecondary} />
+                      <Text style={styles.spaceLocationText} numberOfLines={1}>
+                        {branch.address ? `${branch.address}${branch.city ? `, ${branch.city}` : ''}` : (branch.city || 'Sameer Library Network')}
+                      </Text>
+                    </View>
+                    <View style={styles.spaceFooterRow}>
+                      <View style={styles.seatPill}>
+                        <View style={styles.seatPillDot} />
+                        <Text style={styles.seatPillText}>
+                          {totalSeats > 0 ? `${totalSeats} Seats Active` : 'Open for Admission'}
+                        </Text>
+                      </View>
+                      <View style={styles.amenityItem}>
+                        <Ionicons name="layers-outline" size={15} color={COLORS.primary} />
+                        <Text style={styles.amenityText}>
+                          {roomCount > 0 ? `${roomCount} Study Rooms` : 'High-Speed Wi-Fi'}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              );
+            })
+          )}
         </View>
 
         {/* Interactive Live Seat Preview */}
@@ -553,6 +577,59 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '800',
     color: COLORS.text,
+  },
+  sectionHeaderSub: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  branchesLoadingBox: {
+    paddingVertical: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.surfaceContainerLow,
+    borderRadius: 16,
+  },
+  branchesLoadingText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginTop: 8,
+  },
+  emptyBranchesCard: {
+    paddingVertical: 32,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.surfaceContainerLow,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  emptyBranchesTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.text,
+    marginTop: 8,
+  },
+  emptyBranchesSub: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    marginTop: 4,
+  },
+  branchCodeBadge: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    backgroundColor: 'rgba(0, 104, 91, 0.9)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  branchCodeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#ffffff',
   },
   viewAllBtn: {
     flexDirection: 'row',
