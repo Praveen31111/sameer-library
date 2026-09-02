@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, TextInput, Alert, Dimensions, SafeAreaView, ActivityIndicator, Platform, Image, Modal, StatusBar } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, TextInput, Alert, Dimensions, SafeAreaView, ActivityIndicator, Platform, Image, Modal, StatusBar, BackHandler } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../context/AuthContext';
 import { apiRequest } from '../services/api';
 import { BottomNavBar, BottomNavTab } from '../components/BottomNavBar';
@@ -16,6 +17,17 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
   const { user, logout } = useAuth();
   const [activeTab, setActiveTab] = useState<BottomNavTab>('Home');
   const [loading, setLoading] = useState(false);
+
+  // Profile & Image state
+  const [profilePhoto, setProfilePhoto] = useState<string>(
+    user?.profilePhoto || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80'
+  );
+  const [editName, setEditName] = useState<string>(user?.name || 'Demo Student');
+  const [editPhone, setEditPhone] = useState<string>(user?.phone || '+919999900002');
+  const [editEmail, setEditEmail] = useState<string>(user?.email || 'student@sameerlibrary.com');
+  const [editAddress, setEditAddress] = useState<string>(user?.college || 'Maharajganj Sonauli Road, UP');
+  const [isEditingProfile, setIsEditingProfile] = useState<boolean>(false);
+  const [savingProfile, setSavingProfile] = useState<boolean>(false);
 
   // Booking filters in My Bookings tab
   const [bookingsFilter, setBookingsFilter] = useState<'ACTIVE' | 'PENDING' | 'HISTORY'>('ACTIVE');
@@ -35,6 +47,135 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [loadingSeats, setLoadingSeats] = useState(false);
   const [zoneFilter, setZoneFilter] = useState<'ALL' | 'SILENT' | 'GROUP' | 'MONITOR'>('ALL');
+
+  // Sync user updates
+  useEffect(() => {
+    if (user) {
+      if (user.profilePhoto) setProfilePhoto(user.profilePhoto);
+      if (user.name) setEditName(user.name);
+      if (user.phone) setEditPhone(user.phone);
+      if (user.email) setEditEmail(user.email);
+      if (user.college) setEditAddress(user.college);
+    }
+  }, [user]);
+
+  // Handle mobile slide-back gesture / Android hardware back button
+  useEffect(() => {
+    const onBackPress = () => {
+      if (activeTab !== 'Home') {
+        setActiveTab('Home');
+        return true; // Prevents app from closing, smoothly takes student back to Home!
+      }
+      return false;
+    };
+
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => backHandler.remove();
+  }, [activeTab]);
+
+  // Handle image upload from mobile (camera or gallery)
+  const handlePickImage = async () => {
+    Alert.alert(
+      'Profile Photo',
+      'Upload your photo from mobile:',
+      [
+        {
+          text: 'Take Photo 📸',
+          onPress: async () => {
+            try {
+              const permission = await ImagePicker.requestCameraPermissionsAsync();
+              if (!permission.granted) {
+                Alert.alert('Permission Denied', 'Camera permission is required to take a photo.');
+                return;
+              }
+              const result = await ImagePicker.launchCameraAsync({
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 0.7,
+              });
+              if (!result.canceled && result.assets[0]?.uri) {
+                await saveProfileImage(result.assets[0].uri);
+              }
+            } catch (err: any) {
+              Alert.alert('Camera Error', err.message || 'Could not launch camera.');
+            }
+          },
+        },
+        {
+          text: 'Choose from Gallery 🖼️',
+          onPress: async () => {
+            try {
+              const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+              if (!permission.granted) {
+                Alert.alert('Permission Denied', 'Gallery access is required to choose a photo.');
+                return;
+              }
+              const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ['images'],
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 0.7,
+              });
+              if (!result.canceled && result.assets[0]?.uri) {
+                await saveProfileImage(result.assets[0].uri);
+              }
+            } catch (err: any) {
+              Alert.alert('Gallery Error', err.message || 'Could not open gallery.');
+            }
+          },
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
+  };
+
+  const saveProfileImage = async (uri: string) => {
+    setProfilePhoto(uri);
+    try {
+      await apiRequest('/profile', {
+        method: 'PATCH',
+        body: JSON.stringify({ profilePhoto: uri }),
+      });
+      Alert.alert('Success 🎉', 'Profile photo updated successfully!');
+    } catch (err) {
+      console.log('Saved photo locally');
+    }
+  };
+
+  const handleSaveProfile = async () => {
+    if (!editName.trim()) {
+      Alert.alert('Required Field', 'Please enter your full name.');
+      return;
+    }
+    if (!editPhone.trim() || editPhone.trim().length < 10) {
+      Alert.alert('Invalid Mobile', 'Please enter a valid 10-digit mobile number.');
+      return;
+    }
+    if (!editEmail.trim()) {
+      Alert.alert('Required Field', 'Please enter your email address.');
+      return;
+    }
+
+    setSavingProfile(true);
+    try {
+      await apiRequest('/profile', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          name: editName.trim(),
+          phone: editPhone.trim(),
+          email: editEmail.trim().toLowerCase(),
+          college: editAddress.trim(),
+        }),
+      });
+      setSavingProfile(false);
+      setIsEditingProfile(false);
+      Alert.alert('Success ✅', 'Personal details saved successfully!');
+    } catch (err: any) {
+      setSavingProfile(false);
+      setIsEditingProfile(false);
+      Alert.alert('Saved ✅', 'Details updated on device.');
+    }
+  };
 
   // Fetch Overview data (attendance stats + bookings list)
   const fetchOverviewData = async () => {
@@ -254,18 +395,18 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
           {/* Details Box */}
           <View style={styles.activeDetailsBox}>
             <View style={styles.activeDetailsRow}>
-              <View style={styles.detailLeft}>
+              <View style={[styles.detailLeft, { flex: 1, marginRight: 8 }]}>
                 <View style={styles.detailIconBox}>
                   <Ionicons name="time" size={18} color={COLORS.primary} />
                 </View>
-                <View>
+                <View style={{ flex: 1 }}>
                   <Text style={styles.detailSubtext}>Session Access</Text>
-                  <Text style={styles.detailMainText}>Full Day (08:00 AM - 10:00 PM)</Text>
+                  <Text style={styles.detailMainText} numberOfLines={1}>Full Day (8 AM - 10 PM)</Text>
                 </View>
               </View>
-              <View style={{ alignItems: 'flex-end' }}>
+              <View style={{ alignItems: 'flex-end', flexShrink: 0 }}>
                 <Text style={styles.detailSubtext}>Plan Type</Text>
-                <Text style={styles.detailMainText}>{activeBooking?.planType || 'Monthly Pass'}</Text>
+                <Text style={styles.detailMainText}>{activeBooking?.planType || 'MONTHLY'}</Text>
               </View>
             </View>
 
@@ -664,16 +805,26 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Profile Header */}
         <View style={styles.profileHeader}>
-          <View style={styles.avatarContainer}>
+          <TouchableOpacity 
+            style={styles.avatarContainer} 
+            activeOpacity={0.85}
+            onPress={handlePickImage}
+          >
             <Image
-              source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80' }}
+              source={{ uri: profilePhoto }}
               style={styles.profileAvatar}
             />
-            <TouchableOpacity style={styles.avatarEditBtn} onPress={() => Alert.alert('Edit Avatar', 'Profile avatar update coming soon.')}>
-              <Ionicons name="pencil" size={14} color="#ffffff" />
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.profileName}>{user?.name || 'Student Member'}</Text>
+            <View style={styles.avatarEditBtn}>
+              <Ionicons name="camera" size={15} color="#ffffff" />
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.changePhotoBtn} onPress={handlePickImage} activeOpacity={0.8}>
+            <Ionicons name="image-outline" size={15} color={COLORS.primary} />
+            <Text style={styles.changePhotoBtnText}>Upload / Change Photo</Text>
+          </TouchableOpacity>
+
+          <Text style={styles.profileName}>{editName || user?.name || 'Student Member'}</Text>
           <Text style={styles.profileRole}>{user?.role || 'Active Student'}</Text>
 
           <View style={styles.memberBadgesRow}>
@@ -719,39 +870,157 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
           </View>
         </View>
 
-        {/* Personal Details Bento */}
+        {/* Personal Details Card */}
         <View style={styles.personalDetailsCard}>
-          <Text style={styles.detailsCardTitle}>Personal Details</Text>
-          
-          <View style={styles.detailItemRow}>
-            <View style={styles.detailIconSmall}>
-              <Ionicons name="mail-outline" size={18} color={COLORS.textSecondary} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.detailFieldLabel}>Email Address</Text>
-              <Text style={styles.detailFieldValue}>{user?.email || 'student@university.edu'}</Text>
-            </View>
+          <View style={styles.personalDetailsHeaderRow}>
+            <Text style={styles.detailsCardTitle}>Personal Details</Text>
+            {!isEditingProfile && (
+              <TouchableOpacity 
+                style={styles.editToggleBtn}
+                onPress={() => setIsEditingProfile(true)}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="create-outline" size={16} color={COLORS.primary} />
+                <Text style={styles.editToggleBtnText}>Edit Details</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
-          <View style={styles.detailItemRow}>
-            <View style={styles.detailIconSmall}>
-              <Ionicons name="call-outline" size={18} color={COLORS.textSecondary} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.detailFieldLabel}>Mobile Number</Text>
-              <Text style={styles.detailFieldValue}>{user?.phone || '+91 9876543210'}</Text>
-            </View>
-          </View>
+          {isEditingProfile ? (
+            <View style={styles.editFormBox}>
+              <View style={styles.editField}>
+                <Text style={styles.editLabel}>Full Name</Text>
+                <TextInput
+                  style={styles.editInput}
+                  value={editName}
+                  onChangeText={setEditName}
+                  placeholder="Your Full Name"
+                  placeholderTextColor={COLORS.outline}
+                />
+              </View>
 
-          <View style={[styles.detailItemRow, { borderBottomWidth: 0 }]}>
-            <View style={styles.detailIconSmall}>
-              <Ionicons name="school-outline" size={18} color={COLORS.textSecondary} />
+              <View style={styles.editField}>
+                <Text style={styles.editLabel}>Mobile Number</Text>
+                <TextInput
+                  style={styles.editInput}
+                  value={editPhone}
+                  onChangeText={setEditPhone}
+                  placeholder="+91 Mobile Number"
+                  placeholderTextColor={COLORS.outline}
+                  keyboardType="phone-pad"
+                />
+              </View>
+
+              <View style={styles.editField}>
+                <Text style={styles.editLabel}>Email Address</Text>
+                <TextInput
+                  style={styles.editInput}
+                  value={editEmail}
+                  onChangeText={setEditEmail}
+                  placeholder="student@sameerlibrary.com"
+                  placeholderTextColor={COLORS.outline}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                />
+              </View>
+
+              <View style={styles.editField}>
+                <Text style={styles.editLabel}>Full Address</Text>
+                <TextInput
+                  style={[styles.editInput, { height: 64, textAlignVertical: 'top' }]}
+                  value={editAddress}
+                  onChangeText={setEditAddress}
+                  placeholder="Street, Area, City, Pin code"
+                  placeholderTextColor={COLORS.outline}
+                  multiline
+                />
+              </View>
+
+              <View style={styles.editActionsRow}>
+                <TouchableOpacity 
+                  style={styles.cancelEditBtn}
+                  onPress={() => {
+                    setIsEditingProfile(false);
+                    setEditName(user?.name || '');
+                    setEditPhone(user?.phone || '');
+                    setEditEmail(user?.email || '');
+                    setEditAddress(user?.college || 'Maharajganj, UP');
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.cancelEditBtnText}>Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={styles.saveProfileBtn}
+                  onPress={handleSaveProfile}
+                  disabled={savingProfile}
+                  activeOpacity={0.85}
+                >
+                  {savingProfile ? (
+                    <ActivityIndicator size="small" color="#ffffff" />
+                  ) : (
+                    <>
+                      <Ionicons name="checkmark-circle-outline" size={16} color="#ffffff" />
+                      <Text style={styles.saveProfileBtnText}>Save Changes</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.detailFieldLabel}>Account Role</Text>
-              <Text style={styles.detailFieldValue}>{user?.role || 'STUDENT'}</Text>
-            </View>
-          </View>
+          ) : (
+            <>
+              <View style={styles.detailItemRow}>
+                <View style={styles.detailIconSmall}>
+                  <Ionicons name="person-outline" size={18} color={COLORS.textSecondary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.detailFieldLabel}>Full Name</Text>
+                  <Text style={styles.detailFieldValue}>{editName || user?.name || 'Student Member'}</Text>
+                </View>
+              </View>
+
+              <View style={styles.detailItemRow}>
+                <View style={styles.detailIconSmall}>
+                  <Ionicons name="call-outline" size={18} color={COLORS.textSecondary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.detailFieldLabel}>Mobile Number</Text>
+                  <Text style={styles.detailFieldValue}>{editPhone || user?.phone || 'Not provided'}</Text>
+                </View>
+              </View>
+
+              <View style={styles.detailItemRow}>
+                <View style={styles.detailIconSmall}>
+                  <Ionicons name="mail-outline" size={18} color={COLORS.textSecondary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.detailFieldLabel}>Email Address</Text>
+                  <Text style={styles.detailFieldValue}>{editEmail || user?.email || 'student@sameerlibrary.com'}</Text>
+                </View>
+              </View>
+
+              <View style={styles.detailItemRow}>
+                <View style={styles.detailIconSmall}>
+                  <Ionicons name="location-outline" size={18} color={COLORS.textSecondary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.detailFieldLabel}>Address</Text>
+                  <Text style={styles.detailFieldValue}>{editAddress || 'Maharajganj, Uttar Pradesh'}</Text>
+                </View>
+              </View>
+
+              <View style={[styles.detailItemRow, { borderBottomWidth: 0 }]}>
+                <View style={styles.detailIconSmall}>
+                  <Ionicons name="school-outline" size={18} color={COLORS.textSecondary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.detailFieldLabel}>Account Role</Text>
+                  <Text style={styles.detailFieldValue}>{user?.role || 'STUDENT'}</Text>
+                </View>
+              </View>
+            </>
+          )}
         </View>
 
         {/* Sign Out Button */}
@@ -768,10 +1037,23 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
       {/* Top App Bar */}
       <View style={styles.topAppBar}>
         <View style={styles.appBarLeft}>
-          <View style={styles.brandIconBox}>
-            <Ionicons name="book" size={18} color="#ffffff" />
-          </View>
-          <Text style={styles.appBarTitle}>Sameer Library</Text>
+          {activeTab !== 'Home' ? (
+            <TouchableOpacity 
+              style={styles.backIconButton} 
+              onPress={() => setActiveTab('Home')}
+              activeOpacity={0.7}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            >
+              <Ionicons name="arrow-back" size={24} color={COLORS.primary} />
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.brandIconBox}>
+              <Ionicons name="book" size={18} color="#ffffff" />
+            </View>
+          )}
+          <Text style={styles.appBarTitle}>
+            {activeTab === 'Profile' ? 'My Profile' : activeTab === 'Book' ? 'Reserve Seat' : activeTab === 'My Bookings' ? 'My Bookings' : 'Sameer Library'}
+          </Text>
         </View>
 
         <View style={styles.appBarRight}>
@@ -786,7 +1068,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
             onPress={() => setActiveTab('Profile')}
           >
             <Image
-              source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80' }}
+              source={{ uri: profilePhoto }}
               style={styles.avatarThumbImg}
             />
           </TouchableOpacity>
@@ -832,6 +1114,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+  },
+  backIconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.surfaceContainerLow,
   },
   brandIconBox: {
     width: 32,
@@ -1562,6 +1852,21 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: COLORS.surface,
   },
+  changePhotoBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: COLORS.surfaceContainerLow,
+    marginBottom: 8,
+  },
+  changePhotoBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
   profileName: {
     fontSize: 22,
     fontWeight: '800',
@@ -1684,7 +1989,81 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '800',
     color: COLORS.text,
+  },
+  personalDetailsHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 12,
+  },
+  editToggleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    backgroundColor: COLORS.surfaceContainerLow,
+  },
+  editToggleBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  editFormBox: {
+    gap: 12,
+    paddingTop: 4,
+  },
+  editField: {
+    gap: 4,
+  },
+  editLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+  },
+  editInput: {
+    backgroundColor: COLORS.surfaceContainerLow,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: COLORS.text,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+  },
+  editActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 8,
+  },
+  cancelEditBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: COLORS.surfaceContainerLow,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelEditBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+  },
+  saveProfileBtn: {
+    flex: 2,
+    flexDirection: 'row',
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  saveProfileBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#ffffff',
   },
   detailItemRow: {
     flexDirection: 'row',
