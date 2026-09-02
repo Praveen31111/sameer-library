@@ -41,15 +41,30 @@ export async function apiRequest(endpoint: string, options: RequestInit = {}) {
 
   try {
     const response = await fetch(url, config);
-    const data = await response.json();
+    const contentType = response.headers.get('content-type') || '';
+    
+    let data: any = null;
+    if (contentType.includes('application/json')) {
+      data = await response.json();
+    } else {
+      const text = await response.text();
+      try {
+        data = JSON.parse(text);
+      } catch {
+        if (!response.ok) {
+          throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+        }
+        data = { message: text };
+      }
+    }
     
     if (!response.ok) {
-      throw new Error(data.error || data.message || 'Something went wrong');
+      throw new Error(data?.error || data?.message || `Request failed with status ${response.status}`);
     }
     
     return data;
-  } catch (error) {
-    console.error(`API Error in ${endpoint}:`, error);
+  } catch (error: any) {
+    console.warn(`API Warning in ${endpoint}:`, error?.message || error);
     throw error;
   }
 }

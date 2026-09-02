@@ -317,7 +317,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
         setDailyPrice(String(res.pricing.dailyPrice ?? 50));
       }
     } catch (err: any) {
-      console.error('Failed to fetch pricing:', err);
+      console.warn('Silent pricing fetch fallback:', err?.message || err);
     }
   };
 
@@ -970,7 +970,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
             </View>
 
             {/* Blinking Urgent Action Banner if new bookings waiting */}
-            {bookings.filter(b => b.status === 'pending').length > 0 && (
+            {((statsData?.pendingApprovals ?? 0) > 0 || bookings.filter(b => (b.status || '').toLowerCase() === 'pending').length > 0) && (
               <Animated.View style={[styles.blinkingAlertCard, { opacity: blinkingAnim }]}>
                 <View style={styles.blinkingIconBox}>
                   <Ionicons name="notifications" size={20} color="#ffffff" />
@@ -980,12 +980,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                     🚨 NEW SEAT BOOKING DETECTED!
                   </Text>
                   <Text style={styles.blinkingAlertSub}>
-                    {bookings.filter(b => b.status === 'pending').length} booking request(s) waiting for approval.
+                    {statsData?.pendingApprovals !== undefined 
+                      ? statsData.pendingApprovals 
+                      : bookings.filter(b => (b.status || '').toLowerCase() === 'pending').length} booking request(s) waiting for approval.
                   </Text>
                 </View>
                 <TouchableOpacity 
                   style={styles.blinkingReviewBtn}
-                  onPress={() => setActiveTab('Bookings')}
+                  onPress={() => {
+                    setBookingFilter('PENDING');
+                    setActiveTab('Bookings');
+                  }}
                 >
                   <Text style={styles.blinkingReviewBtnText}>Review →</Text>
                 </TouchableOpacity>
@@ -1050,8 +1055,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                 <Text style={styles.kpiValue}>{statsData?.activeBookings || 342}</Text>
               </View>
 
-              {/* KPI 3: Pending Approvals */}
-              <View style={styles.kpiCard}>
+              {/* KPI 3: Pending Approvals (Real-time count, clickable) */}
+              <TouchableOpacity 
+                style={styles.kpiCard}
+                onPress={() => {
+                  setBookingFilter('PENDING');
+                  setActiveTab('Bookings');
+                }}
+                activeOpacity={0.8}
+              >
                 <View style={styles.kpiTopRow}>
                   <View style={[styles.kpiIconBox, { backgroundColor: 'rgba(180, 91, 66, 0.15)' }]}>
                     <Ionicons name="time" size={20} color={COLORS.tertiary} />
@@ -1061,8 +1073,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                   </View>
                 </View>
                 <Text style={styles.kpiLabel}>Pending Approvals</Text>
-                <Text style={styles.kpiValue}>{statsData?.pendingApprovals || bookings.filter(b => b.status === 'pending').length || 24}</Text>
-              </View>
+                <Text style={styles.kpiValue}>
+                  {statsData?.pendingApprovals !== undefined 
+                    ? statsData.pendingApprovals 
+                    : bookings.filter(b => (b.status || '').toLowerCase() === 'pending').length}
+                </Text>
+              </TouchableOpacity>
 
               {/* KPI 4: Monthly Revenue (Clickable to open breakdown ledger!) */}
               <TouchableOpacity 
@@ -2703,15 +2719,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
     backgroundColor: COLORS.surface,
   },
   headerLeft: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
+    marginRight: 6,
   },
   adminAvatarThumb: {
     width: 36,
@@ -2746,12 +2764,13 @@ const styles = StyleSheet.create({
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
+    flexShrink: 0,
   },
   notifBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: COLORS.surfaceContainerLow,
     alignItems: 'center',
     justifyContent: 'center',
@@ -2759,17 +2778,17 @@ const styles = StyleSheet.create({
   },
   notifDot: {
     position: 'absolute',
-    top: 8,
-    right: 8,
+    top: 7,
+    right: 7,
     width: 6,
     height: 6,
     borderRadius: 3,
     backgroundColor: COLORS.tertiary,
   },
   logoutIconBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: 'rgba(186, 26, 26, 0.08)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -4273,10 +4292,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.primary,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 14,
-    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 12,
+    gap: 3,
   },
   pricingHeaderBtnText: {
     fontSize: 11,

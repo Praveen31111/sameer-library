@@ -16,6 +16,7 @@ export async function GET() {
         const [
             totalStudents,
             activeBookings,
+            pendingApprovals,
             totalSeats,
             revenueThisMonth,
             rooms,
@@ -34,7 +35,14 @@ export async function GET() {
                 }
             }),
 
-            // 3. Total Seats
+            // 3. Pending Approvals
+            prisma.booking.count({
+                where: {
+                    status: "PENDING"
+                }
+            }),
+
+            // 4. Total Seats
             prisma.seat.count(),
 
             // 4. Revenue (Current Month)
@@ -128,6 +136,7 @@ export async function GET() {
             stats: {
                 totalStudents,
                 activeBookings,
+                pendingApprovals,
                 revenue: revenueThisMonth._sum.amount || 0,
                 occupancyRate,
                 totalSeats

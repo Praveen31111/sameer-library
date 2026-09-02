@@ -66,8 +66,8 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
       if (res?.pricing) {
         setPricingConfig(res.pricing);
       }
-    } catch (e) {
-      console.log('Error fetching pricing config:', e);
+    } catch (e: any) {
+      console.warn('Silent student pricing fetch fallback:', e?.message || e);
     }
   };
 
