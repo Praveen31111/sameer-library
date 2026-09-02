@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -17,8 +17,11 @@ import {
   Pressable,
   RefreshControl,
   Image,
+  Animated,
+  Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../context/AuthContext';
 import { apiRequest } from '../services/api';
 import { COLORS } from '../utils/constants';
@@ -56,6 +59,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
   const [bookingFilter, setBookingFilter] = useState<'PENDING' | 'APPROVED' | 'REJECTED' | 'ALL'>('PENDING');
   const [bookings, setBookings] = useState<any[]>([]);
   const [bookingActionLoading, setBookingActionLoading] = useState<string | null>(null);
+
+  // Approval Modal with Online / Offline payment selection
+  const [approvalModalVisible, setApprovalModalVisible] = useState(false);
+  const [selectedBookingToApprove, setSelectedBookingToApprove] = useState<any>(null);
+
+  // Live breakdown stats (library-wise and room-wise)
+  const [libraryStats, setLibraryStats] = useState<any[]>([]);
+  const [roomStats, setRoomStats] = useState<any[]>([]);
+  const [liveRoomFilter, setLiveRoomFilter] = useState<string>('ALL');
+
+  // Blinking alert animation for new bookings in Overview
+  const blinkingAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(blinkingAnim, {
+          toValue: 0.2,
+          duration: 650,
+          useNativeDriver: true,
+        }),
+        Animated.timing(blinkingAnim, {
+          toValue: 1,
+          duration: 650,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, []);
 
   // 3. Facilities State (Branches -> Rooms -> Seats)
   const [facilityLevel, setFacilityLevel] = useState<'branches' | 'rooms' | 'seats'>('branches');
@@ -107,6 +139,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
       if (res.stats) setStatsData(res.stats);
       if (res.occupancyData) setOccupancyData(res.occupancyData);
       if (res.recentActivity) setRecentActivity(res.recentActivity);
+
+      // Also refresh pending bookings so blinking alert is live
+      const bRes = await apiRequest('/admin/bookings?status=PENDING');
+      if (bRes.bookings) setBookings(bRes.bookings);
     } catch (err: any) {
       console.error('Failed to fetch stats:', err);
     }
@@ -159,6 +195,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
       const res = await apiRequest('/admin/live');
       if (res.seats) setLiveSeats(res.seats);
       if (res.stats) setLiveStats(res.stats);
+      if (res.libraryStats) setLibraryStats(res.libraryStats);
+      if (res.roomStats) setRoomStats(res.roomStats);
     } catch (err: any) {
       console.error('Failed to fetch live seats:', err);
     }
@@ -211,6 +249,194 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
     setRefreshing(true);
     await loadActiveTabData();
     setRefreshing(false);
+  };
+
+  // Handle pick Branch photo from phone
+  const handlePickBranchPhoto = () => {
+    Alert.alert('Library Photo', 'Select branch photo from mobile:', [
+      {
+        text: 'Take Photo 📸',
+        onPress: async () => {
+          try {
+            const { status } = await ImagePicker.requestCameraPermissionsAsync();
+            if (status !== 'granted') {
+              Alert.alert('Permission required', 'Camera permission is needed to take a photo.');
+              return;
+            }
+            const result = await ImagePicker.launchCameraAsync({
+              allowsEditing: true,
+              aspect: [16, 9],
+              quality: 0.7,
+              base64: true,
+            });
+            if (!result.canceled && result.assets[0]) {
+              const base64Data = result.assets[0].base64;
+              const photoUri = base64Data
+                ? `data:image/jpeg;base64,${base64Data}`
+                : result.assets[0].uri;
+              setBranchPhoto(photoUri);
+            }
+          } catch (e: any) {
+            Alert.alert('Error', 'Could not open camera.');
+          }
+        },
+      },
+      {
+        text: 'Choose from Gallery 🖼️',
+        onPress: async () => {
+          try {
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (status !== 'granted') {
+              Alert.alert('Permission required', 'Gallery permission is needed to choose a photo.');
+              return;
+            }
+            const result = await ImagePicker.launchImageLibraryAsync({
+              allowsEditing: true,
+              aspect: [16, 9],
+              quality: 0.7,
+              base64: true,
+            });
+            if (!result.canceled && result.assets[0]) {
+              const base64Data = result.assets[0].base64;
+              const photoUri = base64Data
+                ? `data:image/jpeg;base64,${base64Data}`
+                : result.assets[0].uri;
+              setBranchPhoto(photoUri);
+            }
+          } catch (e: any) {
+            Alert.alert('Error', 'Could not open gallery.');
+          }
+        },
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+
+  // Handle pick Room photo from phone
+  const handlePickRoomPhoto = () => {
+    Alert.alert('Room Photo', 'Select room photo from mobile:', [
+      {
+        text: 'Take Photo 📸',
+        onPress: async () => {
+          try {
+            const { status } = await ImagePicker.requestCameraPermissionsAsync();
+            if (status !== 'granted') {
+              Alert.alert('Permission required', 'Camera permission is needed to take a photo.');
+              return;
+            }
+            const result = await ImagePicker.launchCameraAsync({
+              allowsEditing: true,
+              aspect: [16, 9],
+              quality: 0.7,
+              base64: true,
+            });
+            if (!result.canceled && result.assets[0]) {
+              const base64Data = result.assets[0].base64;
+              const photoUri = base64Data
+                ? `data:image/jpeg;base64,${base64Data}`
+                : result.assets[0].uri;
+              setRoomPhoto(photoUri);
+            }
+          } catch (e: any) {
+            Alert.alert('Error', 'Could not open camera.');
+          }
+        },
+      },
+      {
+        text: 'Choose from Gallery 🖼️',
+        onPress: async () => {
+          try {
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (status !== 'granted') {
+              Alert.alert('Permission required', 'Gallery permission is needed to choose a photo.');
+              return;
+            }
+            const result = await ImagePicker.launchImageLibraryAsync({
+              allowsEditing: true,
+              aspect: [16, 9],
+              quality: 0.7,
+              base64: true,
+            });
+            if (!result.canceled && result.assets[0]) {
+              const base64Data = result.assets[0].base64;
+              const photoUri = base64Data
+                ? `data:image/jpeg;base64,${base64Data}`
+                : result.assets[0].uri;
+              setRoomPhoto(photoUri);
+            }
+          } catch (e: any) {
+            Alert.alert('Error', 'Could not open gallery.');
+          }
+        },
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+
+  // 1-Tap WhatsApp Notification function
+  const sendWhatsAppNotification = (booking: any) => {
+    const rawPhone = booking.student?.phone || '';
+    const cleanPhone = rawPhone.replace(/[^0-9]/g, '');
+    if (!cleanPhone) {
+      Alert.alert('Phone Missing', 'No phone number is available for this student.');
+      return;
+    }
+    const formattedPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+    const msg = encodeURIComponent(
+      `Hello ${booking.student?.name || 'Student'}! 📚\n\nYour seat booking at Sameer Library has been APPROVED!\n\n🪑 Seat: ${booking.seat}\n🏢 Room: ${booking.room || 'Silent Zone'}\n🏛️ Library: ${booking.branch || 'Main Branch'}\n📅 Plan: ${booking.planType}\n💰 Amount Paid: ₹${booking.amount}\n✅ Status: ACTIVE\n\nThank you for choosing Sameer Library! Feel free to reach out to the admin desk if you need anything.`
+    );
+    Linking.openURL(`https://wa.me/${formattedPhone}?text=${msg}`).catch(() => {
+      Alert.alert('WhatsApp Error', 'Could not open WhatsApp on this device.');
+    });
+  };
+
+  // Open Approval Modal
+  const handleOpenApprovalModal = (booking: any) => {
+    setSelectedBookingToApprove(booking);
+    setApprovalModalVisible(true);
+  };
+
+  // Approve with payment method selection (Online or Offline)
+  const handleApproveWithPayment = async (paymentMode: 'ONLINE' | 'OFFLINE') => {
+    if (!selectedBookingToApprove) return;
+    const booking = selectedBookingToApprove;
+    setApprovalModalVisible(false);
+    setBookingActionLoading(booking.id);
+
+    try {
+      const res = await apiRequest('/admin/bookings', {
+        method: 'POST',
+        body: JSON.stringify({
+          bookingId: booking.id,
+          action: 'approve',
+          paymentMode,
+        }),
+      });
+
+      if (res.success) {
+        Alert.alert(
+          'Booking Approved 🎉',
+          `Seat ${booking.seat} approved successfully with ${paymentMode === 'ONLINE' ? 'Online Payment' : 'Cash/Offline Payment'}!\n\nWould you like to send WhatsApp confirmation to the student?`,
+          [
+            { text: 'Later', style: 'cancel' },
+            {
+              text: '💬 Send on WhatsApp',
+              onPress: () => sendWhatsAppNotification(booking),
+            },
+          ]
+        );
+        fetchBookings(bookingFilter);
+        fetchLogs(); // Updates payments section!
+        fetchStats();
+      } else {
+        Alert.alert('Error', res.error || 'Failed to approve booking.');
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Action failed');
+    } finally {
+      setBookingActionLoading(null);
+      setSelectedBookingToApprove(null);
+    }
   };
 
   // Open Branch Modal (Create or Edit)
@@ -460,21 +686,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
 
   // Approve / Reject Booking
   const handleBookingAction = async (bookingId: string, action: 'approve' | 'reject') => {
-    const actionLabel = action === 'approve' ? 'Approve' : 'Reject';
-    Alert.alert(`Confirm ${actionLabel}`, `Are you sure you want to ${action} this booking request?`, [
+    if (action === 'approve') {
+      const bObj = bookings.find(b => b.id === bookingId);
+      if (bObj) {
+        handleOpenApprovalModal(bObj);
+        return;
+      }
+    }
+    Alert.alert(`Confirm Reject`, `Are you sure you want to reject this booking request?`, [
       { text: 'Cancel', style: 'cancel' },
       {
-        text: actionLabel,
-        style: action === 'reject' ? 'destructive' : 'default',
+        text: 'Reject',
+        style: 'destructive',
         onPress: async () => {
           setBookingActionLoading(bookingId);
           try {
             const res = await apiRequest('/admin/bookings', {
               method: 'POST',
-              body: JSON.stringify({ bookingId, action }),
+              body: JSON.stringify({ bookingId, action: 'reject' }),
             });
             if (res.success) {
-              Alert.alert('Success', `Booking ${action}d successfully!`);
+              Alert.alert('Success', `Booking rejected.`);
               fetchBookings(bookingFilter);
             }
           } catch (err: any) {
@@ -554,6 +786,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
               <Text style={styles.overviewTitle}>Overview</Text>
               <Text style={styles.overviewSubtitle}>Welcome back, Admin. Here's what's happening today.</Text>
             </View>
+
+            {/* Blinking Urgent Action Banner if new bookings waiting */}
+            {bookings.filter(b => b.status === 'pending').length > 0 && (
+              <Animated.View style={[styles.blinkingAlertCard, { opacity: blinkingAnim }]}>
+                <View style={styles.blinkingIconBox}>
+                  <Ionicons name="notifications" size={20} color="#ffffff" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.blinkingAlertTitle}>
+                    🚨 NEW SEAT BOOKING DETECTED!
+                  </Text>
+                  <Text style={styles.blinkingAlertSub}>
+                    {bookings.filter(b => b.status === 'pending').length} booking request(s) waiting for approval.
+                  </Text>
+                </View>
+                <TouchableOpacity 
+                  style={styles.blinkingReviewBtn}
+                  onPress={() => setActiveTab('Bookings')}
+                >
+                  <Text style={styles.blinkingReviewBtnText}>Review →</Text>
+                </TouchableOpacity>
+              </Animated.View>
+            )}
 
             {/* Bento Grid - 4 KPI Cards */}
             <View style={styles.kpiGrid}>
@@ -678,7 +933,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
 
             {/* Live Activity Feed */}
             <View style={styles.card}>
-              <Text style={styles.cardSectionTitle}>Live Activity Feed</Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <Text style={styles.cardSectionTitle}>Live Activity Feed</Text>
+                {bookings.filter(b => b.status === 'pending').length > 0 && (
+                  <View style={styles.livePulseChip}>
+                    <Animated.View style={[styles.livePulseDot, { opacity: blinkingAnim }]} />
+                    <Text style={styles.livePulseChipText}>LIVE</Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Pending bookings blinking at top of feed */}
+              {bookings.filter(b => b.status === 'pending').map((pb) => (
+                <View key={`live-feed-pb-${pb.id}`} style={styles.activityRowPending}>
+                  <Animated.View style={[styles.activityDot, { backgroundColor: '#ef4444', opacity: blinkingAnim }]} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.activityEventPending}>
+                      ⚡ Seat {pb.seat} ({pb.room || 'Silent Zone'}) booked by {pb.student?.name || 'Student'}
+                    </Text>
+                    <Text style={styles.activityTime}>₹{pb.amount} ({pb.planType}) • Pending Admin Approval</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.quickApproveMiniBtn}
+                    onPress={() => handleOpenApprovalModal(pb)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.quickApproveMiniBtnText}>Approve</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+
               {recentActivity.length > 0 ? (
                 recentActivity.map((act, index) => (
                   <View key={index} style={styles.activityRow}>
@@ -696,9 +980,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                     </View>
                   </View>
                 ))
-              ) : (
+              ) : bookings.filter(b => b.status === 'pending').length === 0 ? (
                 <Text style={styles.emptyText}>No recent activity logged</Text>
-              )}
+              ) : null}
             </View>
           </ScrollView>
         );
@@ -760,7 +1044,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                       </Text>
                     </View>
                   </View>
-                  {item.status === 'pending' && (
+                  {item.status === 'pending' ? (
                     <View style={styles.actionButtonsRow}>
                       <TouchableOpacity
                         style={styles.rejectButton}
@@ -771,11 +1055,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={styles.approveButton}
-                        onPress={() => handleBookingAction(item.id, 'approve')}
+                        onPress={() => handleOpenApprovalModal(item)}
                       >
                         <Ionicons name="checkmark-circle-outline" size={18} color="#ffffff" />
-                        <Text style={styles.approveButtonText}>Approve Seat</Text>
+                        <Text style={styles.approveButtonText}>Approve & Collect</Text>
                       </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <View style={[styles.actionButtonsRow, { justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }]}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Ionicons name="shield-checkmark" size={16} color={COLORS.primary} />
+                        <Text style={{ fontSize: 12, fontWeight: '700', color: COLORS.primary }}>Payment Confirmed</Text>
+                      </View>
+                      {item.student?.phone && (
+                        <TouchableOpacity
+                          style={styles.whatsappActionBtn}
+                          onPress={() => sendWhatsAppNotification(item)}
+                          activeOpacity={0.85}
+                        >
+                          <Ionicons name="logo-whatsapp" size={15} color="#22c55e" />
+                          <Text style={styles.whatsappActionBtnText}>WhatsApp</Text>
+                        </TouchableOpacity>
+                      )}
                     </View>
                   )}
                 </View>
@@ -1014,16 +1315,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
 
       // 4. LIVE SEATS VISUALIZER TAB
       case 'Live':
+        const filteredSeats = liveRoomFilter === 'ALL'
+          ? liveSeats
+          : liveSeats.filter(s => s.roomId === liveRoomFilter);
+
         return (
           <ScrollView
             contentContainerStyle={styles.tabScroll}
             showsVerticalScrollIndicator={false}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0d9488" />}
           >
+            {/* Overall Stat Pills */}
             <View style={styles.liveStatsRow}>
               <View style={[styles.liveStatPill, { backgroundColor: '#1c1c1e' }]}>
                 <Text style={styles.liveStatNum}>{liveStats?.total || 0}</Text>
-                <Text style={styles.liveStatLabel}>Total</Text>
+                <Text style={styles.liveStatLabel}>Total Seats</Text>
               </View>
               <View style={[styles.liveStatPill, { backgroundColor: 'rgba(13, 148, 136, 0.15)' }]}>
                 <Text style={[styles.liveStatNum, { color: '#0d9488' }]}>{liveStats?.available || 0}</Text>
@@ -1031,15 +1337,105 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
               </View>
               <View style={[styles.liveStatPill, { backgroundColor: 'rgba(239, 68, 68, 0.15)' }]}>
                 <Text style={[styles.liveStatNum, { color: '#ef4444' }]}>{liveStats?.occupied || 0}</Text>
-                <Text style={styles.liveStatLabel}>Occupied</Text>
+                <Text style={styles.liveStatLabel}>Booked/Occupied</Text>
               </View>
             </View>
 
-            <Text style={[styles.sectionTitle, { marginTop: 16 }]}>Real-Time Seat Grid</Text>
-            <Text style={styles.subHelpText}>Tap any occupied seat to view student details</Text>
+            {/* SECTION 1: LIBRARY-WISE BREAKDOWN */}
+            <Text style={[styles.sectionTitle, { marginTop: 18, marginBottom: 8 }]}>🏛️ Library-Wise Seat Breakdown</Text>
+            {libraryStats.length > 0 ? (
+              libraryStats.map((b) => (
+                <View key={`lib-stat-${b.id}`} style={styles.libraryBreakdownCard}>
+                  <View style={styles.libraryBreakdownHeader}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.libraryBreakdownTitle}>{b.name}</Text>
+                      <Text style={styles.libraryBreakdownCode}>Branch Code: {b.code}</Text>
+                    </View>
+                    <View style={styles.occupancyBadge}>
+                      <Text style={styles.occupancyBadgeText}>{b.occupancyRate}% Booked</Text>
+                    </View>
+                  </View>
+
+                  {/* Progress Bar */}
+                  <View style={styles.progressBarTrack}>
+                    <View style={[styles.progressBarFill, { width: `${Math.min(b.occupancyRate, 100)}%` }]} />
+                  </View>
+
+                  <View style={styles.breakdownMetricsRow}>
+                    <Text style={styles.metricText}>🪑 Total: <Text style={styles.boldNum}>{b.total}</Text></Text>
+                    <Text style={[styles.metricText, { color: '#ef4444' }]}>🔴 Booked: <Text style={styles.boldNum}>{b.occupied}</Text></Text>
+                    <Text style={[styles.metricText, { color: '#0d9488' }]}>🟢 Free: <Text style={styles.boldNum}>{b.available}</Text></Text>
+                  </View>
+                </View>
+              ))
+            ) : (
+              <View style={styles.libraryBreakdownCard}>
+                <Text style={styles.libraryBreakdownTitle}>Sameer Library - Main Branch</Text>
+                <View style={styles.progressBarTrack}>
+                  <View style={[styles.progressBarFill, { width: `${liveStats?.total > 0 ? Math.round((liveStats.occupied / liveStats.total) * 100) : 40}%` }]} />
+                </View>
+                <View style={styles.breakdownMetricsRow}>
+                  <Text style={styles.metricText}>🪑 Total: <Text style={styles.boldNum}>{liveStats?.total || 30}</Text></Text>
+                  <Text style={[styles.metricText, { color: '#ef4444' }]}>🔴 Booked: <Text style={styles.boldNum}>{liveStats?.occupied || 12}</Text></Text>
+                  <Text style={[styles.metricText, { color: '#0d9488' }]}>🟢 Free: <Text style={styles.boldNum}>{liveStats?.available || 18}</Text></Text>
+                </View>
+              </View>
+            )}
+
+            {/* SECTION 2: ROOM-WISE BREAKDOWN & SELECTOR */}
+            <Text style={[styles.sectionTitle, { marginTop: 18, marginBottom: 8 }]}>🚪 Room-Wise Seat Occupancy</Text>
+            
+            {/* Room Filter Chips */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+              <TouchableOpacity
+                style={[styles.roomFilterPill, liveRoomFilter === 'ALL' && styles.roomFilterPillActive]}
+                onPress={() => setLiveRoomFilter('ALL')}
+              >
+                <Text style={[styles.roomFilterPillText, liveRoomFilter === 'ALL' && styles.roomFilterPillTextActive]}>
+                  All Rooms ({liveSeats.length})
+                </Text>
+              </TouchableOpacity>
+              {roomStats.map((r) => (
+                <TouchableOpacity
+                  key={`filter-${r.id}`}
+                  style={[styles.roomFilterPill, liveRoomFilter === r.id && styles.roomFilterPillActive]}
+                  onPress={() => setLiveRoomFilter(r.id)}
+                >
+                  <Text style={[styles.roomFilterPillText, liveRoomFilter === r.id && styles.roomFilterPillTextActive]}>
+                    {r.name} ({r.occupied}/{r.total})
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            {/* Room Breakdown Stat Cards */}
+            {roomStats.filter(r => liveRoomFilter === 'ALL' || r.id === liveRoomFilter).map((r) => (
+              <View key={`room-stat-${r.id}`} style={styles.roomBreakdownCard}>
+                <View style={styles.roomBreakdownHeader}>
+                  <View>
+                    <Text style={styles.roomBreakdownTitle}>{r.name}</Text>
+                    <Text style={styles.roomBreakdownBranch}>📍 {r.branchName}</Text>
+                  </View>
+                  <View style={[styles.roomOccupancyPill, { backgroundColor: r.occupancyRate > 75 ? 'rgba(239, 68, 68, 0.15)' : 'rgba(13, 148, 136, 0.15)' }]}>
+                    <Text style={[styles.roomOccupancyPillText, { color: r.occupancyRate > 75 ? '#ef4444' : '#0d9488' }]}>
+                      {r.occupancyRate}% Full
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.breakdownMetricsRow}>
+                  <Text style={styles.metricText}>Capacity: <Text style={styles.boldNum}>{r.total}</Text></Text>
+                  <Text style={[styles.metricText, { color: '#ef4444' }]}>Booked: <Text style={styles.boldNum}>{r.occupied}</Text></Text>
+                  <Text style={[styles.metricText, { color: '#0d9488' }]}>Available: <Text style={styles.boldNum}>{r.available}</Text></Text>
+                </View>
+              </View>
+            ))}
+
+            {/* Real-time Seat Grid */}
+            <Text style={[styles.sectionTitle, { marginTop: 18 }]}>🪑 Real-Time Seat Grid</Text>
+            <Text style={styles.subHelpText}>Tap any occupied seat to view student details & WhatsApp contact</Text>
 
             <View style={styles.seatGrid}>
-              {liveSeats.map((seat) => {
+              {filteredSeats.map((seat) => {
                 const isOccupied = seat.status === 'occupied';
                 const isBlocked = seat.status === 'blocked';
 
@@ -1054,7 +1450,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                     activeOpacity={0.7}
                     onPress={() => {
                       if (seat.occupant) {
-                        setSelectedOccupant({ ...seat.occupant, seatNumber: seat.seatNumber, roomName: seat.roomName });
+                        setSelectedOccupant({
+                          ...seat.occupant,
+                          seatNumber: seat.seatNumber,
+                          roomName: seat.roomName,
+                        });
                         setOccupantModalVisible(true);
                       } else {
                         Alert.alert(`Seat ${seat.seatNumber}`, `Status: ${seat.status.toUpperCase()}\nRoom: ${seat.roomName}`);
@@ -1372,7 +1772,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                 onChangeText={setBranchCity}
               />
 
-              <Text style={styles.modalInputLabel}>CHOOSE COVER PHOTO PRESET</Text>
+              <Text style={styles.modalInputLabel}>LIBRARY PHOTO</Text>
+              <TouchableOpacity 
+                style={styles.mobileUploadBtn}
+                onPress={handlePickBranchPhoto}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="camera" size={18} color="#ffffff" />
+                <Text style={styles.mobileUploadBtnText}>Upload Photo from Mobile (Camera/Gallery)</Text>
+              </TouchableOpacity>
+              {branchPhoto ? (
+                <View style={styles.photoPreviewBox}>
+                  <Image source={{ uri: branchPhoto }} style={styles.photoPreviewImg} resizeMode="cover" />
+                  <Text style={styles.photoPreviewText}>Current Selected Library Photo</Text>
+                </View>
+              ) : null}
+
+              <Text style={[styles.modalInputLabel, { marginTop: 10 }]}>OR CHOOSE PRESET</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginVertical: 8 }}>
                 {PHOTO_PRESETS.map((preset, idx) => (
                   <TouchableOpacity
@@ -1426,7 +1842,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                 onChangeText={setRoomCapacity}
               />
 
-              <Text style={styles.modalInputLabel}>CHOOSE ROOM PHOTO PRESET</Text>
+              <Text style={styles.modalInputLabel}>ROOM PHOTO</Text>
+              <TouchableOpacity 
+                style={styles.mobileUploadBtn}
+                onPress={handlePickRoomPhoto}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="camera" size={18} color="#ffffff" />
+                <Text style={styles.mobileUploadBtnText}>Upload Photo from Mobile (Camera/Gallery)</Text>
+              </TouchableOpacity>
+              {roomPhoto ? (
+                <View style={styles.photoPreviewBox}>
+                  <Image source={{ uri: roomPhoto }} style={styles.photoPreviewImg} resizeMode="cover" />
+                  <Text style={styles.photoPreviewText}>Current Selected Room Photo</Text>
+                </View>
+              ) : null}
+
+              <Text style={[styles.modalInputLabel, { marginTop: 10 }]}>OR CHOOSE ROOM PRESET</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginVertical: 8 }}>
                 {PHOTO_PRESETS.map((preset, idx) => (
                   <TouchableOpacity
@@ -1504,10 +1936,114 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                   <Text style={styles.detailLabel}>EMAIL</Text>
                   <Text style={styles.detailValue}>{selectedOccupant.email}</Text>
                 </View>
+                {selectedOccupant.phone && (
+                  <View style={styles.occupantRow}>
+                    <Text style={styles.detailLabel}>MOBILE</Text>
+                    <Text style={styles.detailValue}>📞 {selectedOccupant.phone}</Text>
+                  </View>
+                )}
+                {selectedOccupant.phone && (
+                  <TouchableOpacity
+                    style={[styles.whatsappActionBtn, { width: '100%', justifyContent: 'center', marginTop: 10 }]}
+                    onPress={() => sendWhatsAppNotification({
+                      student: { name: selectedOccupant.name, phone: selectedOccupant.phone },
+                      seat: selectedOccupant.seatNumber,
+                      room: selectedOccupant.roomName,
+                      planType: 'Active Session',
+                      amount: 'Paid',
+                    })}
+                  >
+                    <Ionicons name="logo-whatsapp" size={18} color="#22c55e" />
+                    <Text style={styles.whatsappActionBtnText}>Message on WhatsApp</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             )}
             <TouchableOpacity style={styles.modalCloseBtn} onPress={() => setOccupantModalVisible(false)}>
               <Text style={styles.modalCloseBtnText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* MODAL 5: Approve Booking with Online / Offline Payment */}
+      <Modal
+        visible={approvalModalVisible}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setApprovalModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Pressable style={styles.modalBackdrop} onPress={() => setApprovalModalVisible(false)} />
+          <View style={[styles.modalContent, { maxWidth: 440 }]}>
+            <View style={styles.modalHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.modalTitle}>Approve Booking & Collect Fee</Text>
+                <Text style={styles.modalSubTitle}>
+                  Select how payment was received for this seat
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setApprovalModalVisible(false)}>
+                <Ionicons name="close" size={24} color="#ffffff" />
+              </TouchableOpacity>
+            </View>
+
+            {selectedBookingToApprove && (
+              <View style={styles.approveBookingInfoCard}>
+                <View style={styles.approveInfoRow}>
+                  <Text style={styles.approveInfoLabel}>Student:</Text>
+                  <Text style={styles.approveInfoValue}>{selectedBookingToApprove.student?.name || 'Student'}</Text>
+                </View>
+                <View style={styles.approveInfoRow}>
+                  <Text style={styles.approveInfoLabel}>Seat & Room:</Text>
+                  <Text style={styles.approveInfoValue}>Seat {selectedBookingToApprove.seat} • {selectedBookingToApprove.room}</Text>
+                </View>
+                <View style={styles.approveInfoRow}>
+                  <Text style={styles.approveInfoLabel}>Plan & Fee:</Text>
+                  <Text style={[styles.approveInfoValue, { color: COLORS.primary, fontWeight: '800' }]}>
+                    ₹{selectedBookingToApprove.amount} ({selectedBookingToApprove.planType})
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            <Text style={styles.paymentMethodPrompt}>Select Payment Receipt Mode:</Text>
+
+            <TouchableOpacity
+              style={styles.paymentOptionCard}
+              onPress={() => handleApproveWithPayment('ONLINE')}
+              activeOpacity={0.85}
+            >
+              <View style={[styles.paymentOptionIconBox, { backgroundColor: 'rgba(13, 148, 136, 0.15)' }]}>
+                <Ionicons name="card" size={24} color={COLORS.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.paymentOptionTitle}>Online Payment Received</Text>
+                <Text style={styles.paymentOptionSub}>UPI, QR Code, GPay, PhonePe, or Netbanking</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={COLORS.primary} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.paymentOptionCard, { marginTop: 12 }]}
+              onPress={() => handleApproveWithPayment('OFFLINE')}
+              activeOpacity={0.85}
+            >
+              <View style={[styles.paymentOptionIconBox, { backgroundColor: 'rgba(234, 179, 8, 0.15)' }]}>
+                <Ionicons name="cash" size={24} color="#eab308" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.paymentOptionTitle}>Offline / Cash Payment Received</Text>
+                <Text style={styles.paymentOptionSub}>Physical cash received at reception counter</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#eab308" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.cancelModalBtn}
+              onPress={() => setApprovalModalVisible(false)}
+            >
+              <Text style={styles.cancelModalBtnText}>Cancel</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -2530,6 +3066,335 @@ const styles = StyleSheet.create({
   adminSeatBlocked: {
     backgroundColor: COLORS.surfaceContainerLow,
     borderColor: COLORS.outline,
+  },
+
+  // Blinking alert styles
+  blinkingAlertCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#dc2626',
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 16,
+    gap: 10,
+    elevation: 3,
+  },
+  blinkingIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  blinkingAlertTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#ffffff',
+    letterSpacing: 0.3,
+  },
+  blinkingAlertSub: {
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.9)',
+    marginTop: 2,
+  },
+  blinkingReviewBtn: {
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 16,
+  },
+  blinkingReviewBtnText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#dc2626',
+  },
+
+  // Live Pulse styles
+  livePulseChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    gap: 5,
+  },
+  livePulseDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#ef4444',
+  },
+  livePulseChipText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#ef4444',
+  },
+  activityRowPending: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(239, 68, 68, 0.06)',
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.2)',
+    marginBottom: 8,
+    gap: 8,
+  },
+  activityEventPending: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#b91c1c',
+  },
+  quickApproveMiniBtn: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  quickApproveMiniBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+
+  // WhatsApp button
+  whatsappActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#dcfce7',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 14,
+    gap: 5,
+    borderWidth: 1,
+    borderColor: '#86efac',
+  },
+  whatsappActionBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#15803d',
+  },
+
+  // Mobile upload styles
+  mobileUploadBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.primary,
+    paddingVertical: 12,
+    borderRadius: 10,
+    gap: 8,
+    marginVertical: 8,
+  },
+  mobileUploadBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  photoPreviewBox: {
+    borderRadius: 10,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginBottom: 10,
+  },
+  photoPreviewImg: {
+    width: '100%',
+    height: 120,
+  },
+  photoPreviewText: {
+    fontSize: 10,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    paddingVertical: 4,
+    backgroundColor: COLORS.surfaceContainerLow,
+  },
+
+  // Library breakdown card
+  libraryBreakdownCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  libraryBreakdownHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  libraryBreakdownTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  libraryBreakdownCode: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  occupancyBadge: {
+    backgroundColor: 'rgba(13, 148, 136, 0.12)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  occupancyBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  progressBarTrack: {
+    height: 8,
+    backgroundColor: COLORS.surfaceContainerLow,
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 10,
+  },
+  breakdownMetricsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  metricText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+  },
+  boldNum: {
+    fontWeight: '800',
+    color: COLORS.text,
+  },
+
+  // Room filter pills
+  roomFilterPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: COLORS.surfaceContainerLow,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginRight: 8,
+  },
+  roomFilterPillActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  roomFilterPillText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+  },
+  roomFilterPillTextActive: {
+    color: '#ffffff',
+    fontWeight: '700',
+  },
+  roomBreakdownCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+  },
+  roomBreakdownHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  roomBreakdownTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  roomBreakdownBranch: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  roomOccupancyPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  roomOccupancyPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+
+  // Modal 5: Approval payment selection styles
+  modalSubTitle: {
+    fontSize: 12,
+    color: '#8e8e93',
+    marginTop: 2,
+  },
+  approveBookingInfoCard: {
+    backgroundColor: '#1c1c1e',
+    borderRadius: 10,
+    padding: 12,
+    marginVertical: 12,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: '#2c2c2e',
+  },
+  approveInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  approveInfoLabel: {
+    fontSize: 12,
+    color: '#8e8e93',
+  },
+  approveInfoValue: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  paymentMethodPrompt: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#ffffff',
+    marginBottom: 10,
+  },
+  paymentOptionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1c1c1e',
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#2c2c2e',
+    gap: 12,
+  },
+  paymentOptionIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  paymentOptionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  paymentOptionSub: {
+    fontSize: 11,
+    color: '#8e8e93',
+    marginTop: 2,
+  },
+  cancelModalBtn: {
+    marginTop: 14,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  cancelModalBtnText: {
+    fontSize: 13,
+    color: '#8e8e93',
+    fontWeight: '600',
   },
 });
 

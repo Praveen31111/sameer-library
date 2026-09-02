@@ -65,7 +65,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { bookingId, action } = await request.json();
+        const { bookingId, action, paymentMode } = await request.json();
 
         if (!bookingId || !["approve", "reject"].includes(action)) {
             return NextResponse.json({ error: "Invalid request" }, { status: 400 });
@@ -73,6 +73,7 @@ export async function POST(request: Request) {
 
         const booking = await prisma.booking.findUnique({
             where: { id: bookingId },
+            include: { student: true },
         });
 
         if (!booking) {
@@ -94,11 +95,36 @@ export async function POST(request: Request) {
             },
         });
 
+        // If approved, record the payment with chosen mode (Online vs Offline Cash)
+        if (action === "approve") {
+            const isOnline = paymentMode === "ONLINE";
+            const methodLabel = isOnline ? "Online (UPI / Netbanking)" : "Offline (Cash / Counter)";
+            const providerKey = isOnline ? "ONLINE_UPI" : "OFFLINE_CASH";
+
+            await prisma.payment.upsert({
+                where: { bookingId: booking.id },
+                create: {
+                    bookingId: booking.id,
+                    studentId: booking.studentId,
+                    amount: booking.amount,
+                    status: "SUCCESS",
+                    provider: methodLabel,
+                    providerPaymentId: `${providerKey}_${Date.now()}`,
+                },
+                update: {
+                    status: "SUCCESS",
+                    provider: methodLabel,
+                    amount: booking.amount,
+                },
+            });
+        }
+
         return NextResponse.json({
             success: true,
             booking: {
                 id: updated.id,
                 status: updated.status.toLowerCase(),
+                paymentMode: paymentMode || "OFFLINE",
             },
         });
     } catch (error) {
