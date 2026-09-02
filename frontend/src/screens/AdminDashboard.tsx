@@ -64,6 +64,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
   const [approvalModalVisible, setApprovalModalVisible] = useState(false);
   const [selectedBookingToApprove, setSelectedBookingToApprove] = useState<any>(null);
 
+  // Revenue Breakdown Ledger Modal
+  const [revenueModalVisible, setRevenueModalVisible] = useState(false);
+  const [revenueFilter, setRevenueFilter] = useState<'ALL' | 'ONLINE' | 'OFFLINE'>('ALL');
+  const [revenueSearch, setRevenueSearch] = useState('');
+
   // Live breakdown stats (library-wise and room-wise)
   const [libraryStats, setLibraryStats] = useState<any[]>([]);
   const [roomStats, setRoomStats] = useState<any[]>([]);
@@ -390,6 +395,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
     });
   };
 
+  // Send WhatsApp Payment Receipt
+  const sendReceiptWhatsApp = (payment: any) => {
+    const rawPhone = payment.studentPhone || '';
+    const cleanPhone = rawPhone.replace(/[^0-9]/g, '');
+    if (!cleanPhone) {
+      Alert.alert('Phone Missing', 'No phone number available for this student to send WhatsApp receipt.');
+      return;
+    }
+    const formattedPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+    const msg = encodeURIComponent(
+      `🧾 *OFFICIAL PAYMENT RECEIPT - SAMEER LIBRARY*\n\n` +
+      `👤 Student: ${payment.studentName}\n` +
+      `🪑 Seat: ${payment.seatNumber} • ${payment.roomName}\n` +
+      `🏛️ Branch: ${payment.branchName || 'Sameer Library'}\n` +
+      `💰 Amount Paid: ₹${payment.amount}\n` +
+      `💳 Mode: ${payment.method}\n` +
+      `📅 Plan: ${payment.plan}\n` +
+      `🕒 Date & Time: ${payment.date} ${payment.time || ''}\n` +
+      `🆔 Ref/Txn ID: ${payment.transactionId}\n` +
+      `✅ Status: SUCCESSFUL / VERIFIED\n\n` +
+      `Thank you for studying at Sameer Library! Please keep this receipt for verification.`
+    );
+    Linking.openURL(`https://wa.me/${formattedPhone}?text=${msg}`).catch(() => {
+      Alert.alert('WhatsApp Error', 'Could not open WhatsApp.');
+    });
+  };
+
   // Open Approval Modal
   const handleOpenApprovalModal = (booking: any) => {
     setSelectedBookingToApprove(booking);
@@ -400,8 +432,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
   const handleApproveWithPayment = async (paymentMode: 'ONLINE' | 'OFFLINE') => {
     if (!selectedBookingToApprove) return;
     const booking = selectedBookingToApprove;
+    const approvedAmount = Number(booking.amount) || 0;
     setApprovalModalVisible(false);
     setBookingActionLoading(booking.id);
+
+    // 1. INSTANT OPTIMISTIC REVENUE & STATS UPDATE ON THE SCREEN
+    setStatsData((prev: any) => ({
+      ...prev,
+      revenue: (prev?.revenue || 0) + approvedAmount,
+      pendingApprovals: Math.max((prev?.pendingApprovals || 1) - 1, 0),
+      activeBookings: (prev?.activeBookings || 0) + 1,
+    }));
+
+    // 2. PREPEND TO PAYMENT LOGS IMMEDIATELY SO IT APPEARS IN REVENUE BREAKDOWN
+    const newPaymentEntry = {
+      id: `pay_${Date.now()}`,
+      transactionId: `${paymentMode === 'ONLINE' ? 'UPI_ONLINE' : 'CASH_DESK'}_${Date.now()}`,
+      studentName: booking.student?.name || 'Student',
+      studentEmail: booking.student?.email || 'N/A',
+      studentPhone: booking.student?.phone || null,
+      seatNumber: booking.seat || 'Seat',
+      roomName: booking.room || 'Silent Zone',
+      branchName: booking.branch || 'Main Library',
+      amount: approvedAmount,
+      plan: booking.planType || 'MONTHLY',
+      date: new Date().toLocaleDateString(),
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      status: 'success',
+      method: paymentMode === 'ONLINE' ? 'Online (UPI / Netbanking)' : 'Offline (Cash / Counter)',
+    };
+    setPaymentLogs((prev) => [newPaymentEntry, ...prev]);
 
     try {
       const res = await apiRequest('/admin/bookings', {
@@ -416,9 +476,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
       if (res.success) {
         Alert.alert(
           'Booking Approved 🎉',
-          `Seat ${booking.seat} approved successfully with ${paymentMode === 'ONLINE' ? 'Online Payment' : 'Cash/Offline Payment'}!\n\nWould you like to send WhatsApp confirmation to the student?`,
+          `Seat ${booking.seat} approved successfully!\n\n💰 ₹${approvedAmount} added to Monthly Revenue (${paymentMode === 'ONLINE' ? 'Online Payment' : 'Cash/Counter'}).`,
           [
-            { text: 'Later', style: 'cancel' },
+            { text: 'Done', style: 'cancel' },
             {
               text: '💬 Send on WhatsApp',
               onPress: () => sendWhatsAppNotification(booking),
@@ -426,13 +486,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
           ]
         );
         fetchBookings(bookingFilter);
-        fetchLogs(); // Updates payments section!
+        fetchLogs(); // Synchronize with backend database payments!
         fetchStats();
       } else {
         Alert.alert('Error', res.error || 'Failed to approve booking.');
+        fetchStats();
       }
     } catch (err: any) {
       Alert.alert('Error', err.message || 'Action failed');
+      fetchStats();
     } finally {
       setBookingActionLoading(null);
       setSelectedBookingToApprove(null);
@@ -852,22 +914,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                 <Text style={styles.kpiValue}>{statsData?.pendingApprovals || bookings.filter(b => b.status === 'pending').length || 24}</Text>
               </View>
 
-              {/* KPI 4: Monthly Revenue (Teal Accent Card) */}
-              <View style={[styles.kpiCard, styles.revenueCard]}>
+              {/* KPI 4: Monthly Revenue (Clickable to open breakdown ledger!) */}
+              <TouchableOpacity 
+                style={[styles.kpiCard, styles.revenueCard]}
+                onPress={() => {
+                  fetchLogs();
+                  setRevenueModalVisible(true);
+                }}
+                activeOpacity={0.82}
+              >
                 <View style={styles.kpiTopRow}>
                   <View style={[styles.kpiIconBox, { backgroundColor: 'rgba(255, 255, 255, 0.25)' }]}>
                     <Ionicons name="cash" size={20} color="#ffffff" />
                   </View>
                   <View style={[styles.trendChip, { backgroundColor: 'rgba(255, 255, 255, 0.25)' }]}>
-                    <Ionicons name="trending-up" size={12} color="#ffffff" />
-                    <Text style={[styles.trendChipText, { color: '#ffffff' }]}>4.5%</Text>
+                    <Ionicons name="receipt-outline" size={12} color="#ffffff" />
+                    <Text style={[styles.trendChipText, { color: '#ffffff', fontWeight: '800' }]}>Details →</Text>
                   </View>
                 </View>
                 <Text style={[styles.kpiLabel, { color: 'rgba(255, 255, 255, 0.85)' }]}>Monthly Revenue</Text>
                 <Text style={[styles.kpiValue, { color: '#ffffff' }]}>
-                  ₹{statsData?.revenue?.toLocaleString() || '45,200'}
+                  ₹{(statsData?.revenue !== undefined ? statsData.revenue : (paymentLogs.reduce((acc, p) => acc + (Number(p.amount) || 0), 0) || 0)).toLocaleString()}
                 </Text>
-              </View>
+                <Text style={styles.kpiTapHint}>
+                  👆 Tap to view who paid & details
+                </Text>
+              </TouchableOpacity>
             </View>
 
             {/* Live Occupancy Section */}
@@ -2044,6 +2116,232 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
               onPress={() => setApprovalModalVisible(false)}
             >
               <Text style={styles.cancelModalBtnText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* MODAL 6: Monthly Revenue Breakdown & Full Payment Ledger */}
+      <Modal
+        visible={revenueModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setRevenueModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Pressable style={styles.modalBackdrop} onPress={() => setRevenueModalVisible(false)} />
+          <View style={[styles.modalContent, { maxHeight: '88%', paddingBottom: 16 }]}>
+            {/* Header */}
+            <View style={styles.modalHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.modalTitle}>💰 Monthly Revenue Ledger</Text>
+                <Text style={styles.modalSubTitle}>
+                  Complete breakdown of all student fees & payments
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setRevenueModalVisible(false)}>
+                <Ionicons name="close" size={24} color="#ffffff" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Total Revenue & Online/Offline Summary Card */}
+            {(() => {
+              const totalSum = paymentLogs.reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
+              const onlinePayments = paymentLogs.filter(p => (p.method || '').toLowerCase().includes('online') || (p.method || '').toLowerCase().includes('upi'));
+              const offlinePayments = paymentLogs.filter(p => !((p.method || '').toLowerCase().includes('online') || (p.method || '').toLowerCase().includes('upi')));
+              const onlineSum = onlinePayments.reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
+              const offlineSum = offlinePayments.reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
+
+              return (
+                <View style={styles.revenueLedgerSummaryCard}>
+                  <View style={styles.revenueLedgerTopRow}>
+                    <View>
+                      <Text style={styles.revenueLedgerLabel}>TOTAL REVENUE COLLECTED</Text>
+                      <Text style={styles.revenueLedgerBigValue}>₹{totalSum.toLocaleString()}</Text>
+                    </View>
+                    <View style={styles.revenueLedgerCountChip}>
+                      <Ionicons name="receipt" size={14} color={COLORS.primary} />
+                      <Text style={styles.revenueLedgerCountText}>{paymentLogs.length} Receipts</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.revenueSplitDivider} />
+
+                  <View style={styles.revenueSplitRowBoxes}>
+                    <View style={styles.revenueSplitBox}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Ionicons name="card" size={14} color={COLORS.primary} />
+                        <Text style={styles.revenueSplitBoxTitle}>Online (UPI/QR)</Text>
+                      </View>
+                      <Text style={[styles.revenueSplitBoxAmount, { color: COLORS.primary }]}>
+                        ₹{onlineSum.toLocaleString()}
+                      </Text>
+                      <Text style={styles.revenueSplitBoxCount}>{onlinePayments.length} transactions</Text>
+                    </View>
+
+                    <View style={styles.revenueSplitBox}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Ionicons name="cash" size={14} color="#eab308" />
+                        <Text style={styles.revenueSplitBoxTitle}>Offline (Cash)</Text>
+                      </View>
+                      <Text style={[styles.revenueSplitBoxAmount, { color: '#eab308' }]}>
+                        ₹{offlineSum.toLocaleString()}
+                      </Text>
+                      <Text style={styles.revenueSplitBoxCount}>{offlinePayments.length} transactions</Text>
+                    </View>
+                  </View>
+                </View>
+              );
+            })()}
+
+            {/* Filter Tabs: ALL, ONLINE, OFFLINE */}
+            <View style={styles.revenueFilterRow}>
+              {(['ALL', 'ONLINE', 'OFFLINE'] as const).map((mode) => (
+                <TouchableOpacity
+                  key={mode}
+                  style={[
+                    styles.revenueFilterTab,
+                    revenueFilter === mode && styles.revenueFilterTabActive,
+                  ]}
+                  onPress={() => setRevenueFilter(mode)}
+                >
+                  <Text
+                    style={[
+                      styles.revenueFilterTabText,
+                      revenueFilter === mode && styles.revenueFilterTabTextActive,
+                    ]}
+                  >
+                    {mode === 'ALL' ? 'All Payments' : mode === 'ONLINE' ? '💳 Online' : '💵 Cash/Offline'}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Search Bar */}
+            <View style={styles.revenueSearchBar}>
+              <Ionicons name="search" size={16} color="#8e8e93" />
+              <TextInput
+                style={styles.revenueSearchInput}
+                placeholder="Search by student, seat, or phone..."
+                placeholderTextColor="#8e8e93"
+                value={revenueSearch}
+                onChangeText={setRevenueSearch}
+              />
+              {revenueSearch ? (
+                <TouchableOpacity onPress={() => setRevenueSearch('')}>
+                  <Ionicons name="close-circle" size={16} color="#8e8e93" />
+                </TouchableOpacity>
+              ) : null}
+            </View>
+
+            {/* Payment List */}
+            {(() => {
+              const filtered = paymentLogs.filter((p) => {
+                const isOnline = (p.method || '').toLowerCase().includes('online') || (p.method || '').toLowerCase().includes('upi');
+                if (revenueFilter === 'ONLINE' && !isOnline) return false;
+                if (revenueFilter === 'OFFLINE' && isOnline) return false;
+                if (revenueSearch) {
+                  const q = revenueSearch.toLowerCase();
+                  const matchName = (p.studentName || '').toLowerCase().includes(q);
+                  const matchSeat = (p.seatNumber || '').toLowerCase().includes(q);
+                  const matchPhone = (p.studentPhone || '').toLowerCase().includes(q);
+                  const matchRoom = (p.roomName || '').toLowerCase().includes(q);
+                  return matchName || matchSeat || matchPhone || matchRoom;
+                }
+                return true;
+              });
+
+              if (filtered.length === 0) {
+                return (
+                  <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+                    <Ionicons name="receipt-outline" size={44} color="#8e8e93" />
+                    <Text style={{ color: '#8e8e93', marginTop: 10, fontSize: 13 }}>
+                      No payments found matching criteria
+                    </Text>
+                  </View>
+                );
+              }
+
+              return (
+                <ScrollView style={{ maxHeight: 380 }} showsVerticalScrollIndicator={false}>
+                  {filtered.map((item, idx) => {
+                    const isOnline = (item.method || '').toLowerCase().includes('online') || (item.method || '').toLowerCase().includes('upi');
+
+                    return (
+                      <View key={item.id || idx} style={styles.paymentDetailCard}>
+                        {/* Top: Student Name, Avatar & Amount */}
+                        <View style={styles.paymentDetailTopRow}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+                            <View style={[styles.studentAvatarCircle, { backgroundColor: isOnline ? 'rgba(13, 148, 136, 0.15)' : 'rgba(234, 179, 8, 0.15)' }]}>
+                              <Ionicons name="person" size={16} color={isOnline ? COLORS.primary : '#eab308'} />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.paymentStudentName} numberOfLines={1}>
+                                {item.studentName}
+                              </Text>
+                              {item.studentPhone ? (
+                                <Text style={styles.paymentStudentContact}>
+                                  📞 {item.studentPhone} {item.studentEmail ? `• ${item.studentEmail}` : ''}
+                                </Text>
+                              ) : (
+                                <Text style={styles.paymentStudentContact}>{item.studentEmail || 'N/A'}</Text>
+                              )}
+                            </View>
+                          </View>
+                          <View style={{ alignItems: 'flex-end' }}>
+                            <Text style={styles.paymentAmountText}>₹{item.amount}</Text>
+                            <View style={[styles.methodBadge, { backgroundColor: isOnline ? 'rgba(13, 148, 136, 0.15)' : 'rgba(234, 179, 8, 0.15)' }]}>
+                              <Text style={[styles.methodBadgeText, { color: isOnline ? COLORS.primary : '#eab308' }]}>
+                                {isOnline ? '💳 Online (UPI)' : '💵 Cash/Offline'}
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
+
+                        {/* Mid: Seat & Date Info */}
+                        <View style={styles.paymentDetailInfoBox}>
+                          <View style={styles.paymentInfoCol}>
+                            <Text style={styles.paymentDetailLabel}>SEAT & ROOM</Text>
+                            <Text style={styles.paymentDetailVal}>
+                              🪑 Seat {item.seatNumber} • {item.roomName || 'Silent Zone'}
+                            </Text>
+                          </View>
+                          <View style={[styles.paymentInfoCol, { alignItems: 'flex-end' }]}>
+                            <Text style={styles.paymentDetailLabel}>PLAN & DATE</Text>
+                            <Text style={styles.paymentDetailVal}>
+                              {item.plan} • {item.date} {item.time ? `(${item.time})` : ''}
+                            </Text>
+                          </View>
+                        </View>
+
+                        {/* Bottom: Transaction Reference & WhatsApp Receipt button */}
+                        <View style={styles.paymentDetailBottomRow}>
+                          <Text style={styles.paymentTxnRef} numberOfLines={1}>
+                            Ref: {item.transactionId}
+                          </Text>
+                          {item.studentPhone && (
+                            <TouchableOpacity
+                              style={styles.receiptWhatsAppBtn}
+                              onPress={() => sendReceiptWhatsApp(item)}
+                              activeOpacity={0.8}
+                            >
+                              <Ionicons name="logo-whatsapp" size={13} color="#22c55e" />
+                              <Text style={styles.receiptWhatsAppBtnText}>Send Receipt</Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      </View>
+                    );
+                  })}
+                </ScrollView>
+              );
+            })()}
+
+            <TouchableOpacity
+              style={[styles.modalCloseBtn, { marginTop: 12 }]}
+              onPress={() => setRevenueModalVisible(false)}
+            >
+              <Text style={styles.modalCloseBtnText}>Close Ledger</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -3395,6 +3693,232 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#8e8e93',
     fontWeight: '600',
+  },
+
+  kpiTapHint: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.85)',
+    marginTop: 6,
+    letterSpacing: 0.2,
+  },
+
+  // Revenue Ledger Modal Styles
+  revenueLedgerSummaryCard: {
+    backgroundColor: '#1c1c1e',
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#2c2c2e',
+    marginVertical: 10,
+  },
+  revenueLedgerTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  revenueLedgerLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#8e8e93',
+    letterSpacing: 0.5,
+  },
+  revenueLedgerBigValue: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#22c55e',
+    marginTop: 2,
+  },
+  revenueLedgerCountChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(13, 148, 136, 0.15)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    gap: 5,
+  },
+  revenueLedgerCountText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  revenueSplitDivider: {
+    height: 1,
+    backgroundColor: '#2c2c2e',
+    marginVertical: 10,
+  },
+  revenueSplitRowBoxes: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  revenueSplitBox: {
+    flex: 1,
+    backgroundColor: '#252528',
+    borderRadius: 10,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#323236',
+  },
+  revenueSplitBoxTitle: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  revenueSplitBoxAmount: {
+    fontSize: 15,
+    fontWeight: '800',
+    marginTop: 4,
+  },
+  revenueSplitBoxCount: {
+    fontSize: 10,
+    color: '#8e8e93',
+    marginTop: 2,
+  },
+  revenueFilterRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginVertical: 8,
+  },
+  revenueFilterTab: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#1c1c1e',
+    borderWidth: 1,
+    borderColor: '#2c2c2e',
+    alignItems: 'center',
+  },
+  revenueFilterTabActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  revenueFilterTabText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#8e8e93',
+  },
+  revenueFilterTabTextActive: {
+    color: '#ffffff',
+    fontWeight: '700',
+  },
+  revenueSearchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1c1c1e',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: '#2c2c2e',
+    gap: 8,
+    marginBottom: 10,
+  },
+  revenueSearchInput: {
+    flex: 1,
+    fontSize: 12,
+    color: '#ffffff',
+    padding: 0,
+  },
+
+  // Payment Detail Card
+  paymentDetailCard: {
+    backgroundColor: '#1c1c1e',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#2c2c2e',
+  },
+  paymentDetailTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  studentAvatarCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  paymentStudentName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  paymentStudentContact: {
+    fontSize: 10,
+    color: '#8e8e93',
+    marginTop: 1,
+  },
+  paymentAmountText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#22c55e',
+  },
+  methodBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginTop: 2,
+  },
+  methodBadgeText: {
+    fontSize: 9,
+    fontWeight: '700',
+  },
+  paymentDetailInfoBox: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    backgroundColor: '#252528',
+    borderRadius: 8,
+    padding: 8,
+    marginVertical: 4,
+  },
+  paymentInfoCol: {
+    flex: 1,
+  },
+  paymentDetailLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#8e8e93',
+  },
+  paymentDetailVal: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#ffffff',
+    marginTop: 2,
+  },
+  paymentDetailBottomRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 6,
+    paddingTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: '#2c2c2e',
+  },
+  paymentTxnRef: {
+    fontSize: 9,
+    color: '#636366',
+    flex: 1,
+  },
+  receiptWhatsAppBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#14532d',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+    borderWidth: 1,
+    borderColor: '#22c55e',
+  },
+  receiptWhatsAppBtnText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#86efac',
   },
 });
 
