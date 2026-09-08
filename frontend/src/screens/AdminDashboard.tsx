@@ -95,14 +95,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
   const [revenueFilter, setRevenueFilter] = useState<'ALL' | 'ONLINE' | 'OFFLINE'>('ALL');
   const [revenueSearch, setRevenueSearch] = useState('');
 
-  // 3. Pricing & Offers Management State
+  // 3. Pricing & Offers Management State (Monthly-only)
   const [pricingModalVisible, setPricingModalVisible] = useState(false);
   const [monthlyBasePrice, setMonthlyBasePrice] = useState('1000');
   const [discountPercent, setDiscountPercent] = useState('20');
   const [discountActive, setDiscountActive] = useState(false);
   const [offerTitle, setOfferTitle] = useState('Limited Time Offer: Book your monthly seat at a discount!');
-  const [weeklyPrice, setWeeklyPrice] = useState('300');
-  const [dailyPrice, setDailyPrice] = useState('50');
   const [savingPricing, setSavingPricing] = useState(false);
 
   // Live breakdown stats (library-wise and room-wise)
@@ -338,8 +336,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
         setDiscountPercent(String(res.pricing.discountPercent ?? 0));
         setDiscountActive(Boolean(res.pricing.discountActive));
         setOfferTitle(res.pricing.offerTitle || '');
-        setWeeklyPrice(String(res.pricing.weeklyPrice ?? 300));
-        setDailyPrice(String(res.pricing.dailyPrice ?? 50));
       }
     } catch (err: any) {
       console.warn('Silent pricing fetch fallback:', err?.message || err);
@@ -357,12 +353,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
           discountPercent: Number(discountPercent) || 0,
           discountActive,
           offerTitle,
-          weeklyPrice: Number(weeklyPrice) || 300,
-          dailyPrice: Number(dailyPrice) || 50,
         }),
       });
       if (res.success) {
-        Alert.alert('Pricing Updated ✅', 'New seat prices & discount offers have been successfully saved and applied for all students!');
+        Alert.alert('Pricing Updated ✅', 'New monthly seat price & discount offer have been successfully applied for all students!');
         setPricingModalVisible(false);
       } else {
         Alert.alert('Error', res.error || 'Failed to update pricing');
@@ -1182,8 +1176,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                     )}
                   </View>
                   <Text style={styles.pricingQuickSub}>
-                    Monthly: ₹{discountActive ? Math.round(Number(monthlyBasePrice) * (1 - Number(discountPercent)/100)) : monthlyBasePrice}
-                    {discountActive ? ` (Was ₹${monthlyBasePrice})` : ''} • Weekly: ₹{weeklyPrice} • Daily: ₹{dailyPrice}
+                    Monthly Fee: ₹{discountActive ? Math.round(Number(monthlyBasePrice) * (1 - Number(discountPercent)/100)) : monthlyBasePrice} / month
+                    {discountActive ? ` (Regular: ₹${monthlyBasePrice})` : ''} • Monthly plan only
                   </Text>
                 </View>
               </View>
@@ -3207,30 +3201,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                 </>
               ) : null}
 
-              {/* Other Plans: Weekly & Daily */}
-              <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.modalInputLabel}>WEEKLY PRICE (₹)</Text>
-                  <TextInput
-                    style={styles.modalInput}
-                    placeholder="300"
-                    placeholderTextColor="#8e8e93"
-                    keyboardType="numeric"
-                    value={weeklyPrice}
-                    onChangeText={setWeeklyPrice}
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.modalInputLabel}>DAILY PASS (₹)</Text>
-                  <TextInput
-                    style={styles.modalInput}
-                    placeholder="50"
-                    placeholderTextColor="#8e8e93"
-                    keyboardType="numeric"
-                    value={dailyPrice}
-                    onChangeText={setDailyPrice}
-                  />
-                </View>
+              {/* Plan Info Badge */}
+              <View style={{
+                backgroundColor: 'rgba(13, 148, 136, 0.1)',
+                borderColor: '#0d9488',
+                borderWidth: 1,
+                borderRadius: 10,
+                padding: 12,
+                marginTop: 14,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 10,
+              }}>
+                <Ionicons name="information-circle" size={20} color="#0d9488" />
+                <Text style={{ color: '#ffffff', fontSize: 12, flex: 1, lineHeight: 16 }}>
+                  Only <Text style={{ fontWeight: '800', color: '#0d9488' }}>Monthly Membership (30 Days)</Text> admission is enabled. Daily and Weekly options have been disabled as requested.
+                </Text>
               </View>
             </ScrollView>
 

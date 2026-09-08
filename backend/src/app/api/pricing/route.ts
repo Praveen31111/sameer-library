@@ -14,8 +14,6 @@ interface PricingConfig {
     discountPercent: number;
     discountActive: boolean;
     offerTitle: string;
-    weeklyPrice: number;
-    dailyPrice: number;
     updatedAt: string;
 }
 
@@ -24,9 +22,7 @@ const DEFAULT_PRICING: PricingConfig = {
     monthlyPrice: 1000,
     discountPercent: 0,
     discountActive: false,
-    offerTitle: "Special Student Discount! Book your seat now.",
-    weeklyPrice: 300,
-    dailyPrice: 50,
+    offerTitle: "Special Student Discount! Book your monthly seat now.",
     updatedAt: new Date().toISOString(),
 };
 
@@ -92,8 +88,6 @@ export async function POST(req: Request) {
             discountPercent,
             discountActive,
             offerTitle: body.offerTitle?.trim() || "Limited Time Offer: Book your monthly seat at a discount!",
-            weeklyPrice: Math.max(0, Number(body.weeklyPrice) || 300),
-            dailyPrice: Math.max(0, Number(body.dailyPrice) || 50),
             updatedAt: new Date().toISOString(),
         };
 

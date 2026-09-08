@@ -45,7 +45,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [selectedSeatId, setSelectedSeatId] = useState<string | null>(null);
   const [seatsList, setSeatsList] = useState<any[]>([]);
-  const [bookingPlan, setBookingPlan] = useState<'DAILY' | 'WEEKLY' | 'MONTHLY'>('MONTHLY');
+  const [bookingPlan, setBookingPlan] = useState<'MONTHLY'>('MONTHLY');
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [loadingSeats, setLoadingSeats] = useState(false);
   const [zoneFilter, setZoneFilter] = useState<'ALL' | 'SILENT' | 'GROUP' | 'MONITOR'>('ALL');
@@ -55,15 +55,13 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const scanningLock = useRef(false);
 
-  // Dynamic Pricing & Discount Offer State
+  // Dynamic Pricing & Discount Offer State (Monthly-only)
   const [pricingConfig, setPricingConfig] = useState<any>({
     monthlyBasePrice: 1000,
     monthlyPrice: 1000,
     discountPercent: 0,
     discountActive: false,
     offerTitle: '',
-    weeklyPrice: 300,
-    dailyPrice: 50,
   });
 
   // Fetch Pricing & Discounts from server
@@ -501,22 +499,14 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
       return;
     }
 
-    const price = bookingPlan === 'DAILY'
-      ? (Number(pricingConfig?.dailyPrice) || 50)
-      : bookingPlan === 'WEEKLY'
-      ? (Number(pricingConfig?.weeklyPrice) || 300)
-      : (pricingConfig?.discountActive && Number(pricingConfig?.discountPercent) > 0
-          ? Number(pricingConfig?.monthlyPrice)
-          : (Number(pricingConfig?.monthlyBasePrice) || 1000));
+    // Monthly price with discount offer calculation
+    const price = pricingConfig?.discountActive && Number(pricingConfig?.discountPercent) > 0
+      ? Number(pricingConfig?.monthlyPrice)
+      : (Number(pricingConfig?.monthlyBasePrice) || 1000);
+
     const start = new Date(startDate);
     const end = new Date(start);
-    if (bookingPlan === 'DAILY') {
-      end.setDate(start.getDate() + 1);
-    } else if (bookingPlan === 'WEEKLY') {
-      end.setDate(start.getDate() + 7);
-    } else if (bookingPlan === 'MONTHLY') {
-      end.setDate(start.getDate() + 30);
-    }
+    end.setDate(start.getDate() + 30); // Monthly admission: 30 full days access
 
     setLoading(true);
     try {
@@ -1050,48 +1040,80 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
                 <Text style={styles.confirmSeatSub}>High-Speed Wi-Fi • Power Outlet</Text>
               </View>
               <View style={{ alignItems: 'flex-end' }}>
-                {bookingPlan === 'MONTHLY' && pricingConfig?.discountActive && Number(pricingConfig?.discountPercent) > 0 ? (
+                {pricingConfig?.discountActive && Number(pricingConfig?.discountPercent) > 0 ? (
                   <View style={{ alignItems: 'flex-end' }}>
                     <Text style={styles.strikethroughPrice}>₹{pricingConfig.monthlyBasePrice}</Text>
                     <Text style={styles.confirmPrice}>₹{pricingConfig.monthlyPrice}</Text>
                   </View>
                 ) : (
                   <Text style={styles.confirmPrice}>
-                    ₹{bookingPlan === 'DAILY' ? (pricingConfig?.dailyPrice || 50) : bookingPlan === 'WEEKLY' ? (pricingConfig?.weeklyPrice || 300) : (pricingConfig?.monthlyBasePrice || 1000)}
+                    ₹{pricingConfig?.monthlyBasePrice || 1000}
                   </Text>
                 )}
                 <Text style={styles.confirmDuration}>
-                  / {bookingPlan.toLowerCase()} {bookingPlan === 'MONTHLY' && pricingConfig?.discountActive && Number(pricingConfig?.discountPercent) > 0 ? `(${pricingConfig.discountPercent}% OFF)` : ''}
+                  / month {pricingConfig?.discountActive && Number(pricingConfig?.discountPercent) > 0 ? `(${pricingConfig.discountPercent}% OFF)` : ''}
                 </Text>
               </View>
             </View>
 
-            {/* Plan selector pills */}
-            <View style={styles.planSelectorRow}>
-              {(['DAILY', 'WEEKLY', 'MONTHLY'] as const).map(plan => {
-                const planPrice = plan === 'DAILY'
-                  ? (pricingConfig?.dailyPrice || 50)
-                  : plan === 'WEEKLY'
-                  ? (pricingConfig?.weeklyPrice || 300)
-                  : (pricingConfig?.discountActive && Number(pricingConfig?.discountPercent) > 0 ? pricingConfig.monthlyPrice : (pricingConfig?.monthlyBasePrice || 1000));
-
-                return (
-                  <TouchableOpacity
-                    key={plan}
-                    style={[styles.planPill, bookingPlan === plan && styles.planPillActive]}
-                    onPress={() => setBookingPlan(plan)}
-                  >
-                    <Text style={[styles.planPillText, bookingPlan === plan && styles.planPillTextActive]}>
-                      {plan === 'DAILY' ? `Daily (₹${planPrice})` : plan === 'WEEKLY' ? `Weekly (₹${planPrice})` : `Monthly (₹${planPrice})`}
+            {/* Monthly Membership Plan Badge (Daily and Weekly removed) */}
+            <View style={{
+              backgroundColor: 'rgba(13, 148, 136, 0.1)',
+              borderColor: '#0d9488',
+              borderWidth: 1.2,
+              borderRadius: 12,
+              padding: 12,
+              marginVertical: 10,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <View style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 18,
+                  backgroundColor: '#0d9488',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}>
+                  <Ionicons name="calendar" size={18} color="#ffffff" />
+                </View>
+                <View>
+                  <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 14 }}>
+                    Monthly Membership Pass
+                  </Text>
+                  <Text style={{ color: COLORS.textSecondary, fontSize: 11, marginTop: 2 }}>
+                    Full 30 Days 24/7 Library & Seat Access
+                  </Text>
+                </View>
+              </View>
+              
+              <View style={{ alignItems: 'flex-end' }}>
+                {pricingConfig?.discountActive && Number(pricingConfig?.discountPercent) > 0 ? (
+                  <View style={{
+                    backgroundColor: '#ef4444',
+                    paddingHorizontal: 8,
+                    paddingVertical: 3,
+                    borderRadius: 8,
+                  }}>
+                    <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 11 }}>
+                      {pricingConfig.discountPercent}% OFF
                     </Text>
-                    {plan === 'MONTHLY' && pricingConfig?.discountActive && Number(pricingConfig?.discountPercent) > 0 ? (
-                      <View style={styles.pillDiscountTag}>
-                        <Text style={styles.pillDiscountTagText}>{pricingConfig.discountPercent}% OFF</Text>
-                      </View>
-                    ) : null}
-                  </TouchableOpacity>
-                );
-              })}
+                  </View>
+                ) : (
+                  <View style={{
+                    backgroundColor: 'rgba(13, 148, 136, 0.25)',
+                    paddingHorizontal: 8,
+                    paddingVertical: 3,
+                    borderRadius: 8,
+                  }}>
+                    <Text style={{ color: '#0d9488', fontWeight: '800', fontSize: 11 }}>
+                      ACTIVE PLAN
+                    </Text>
+                  </View>
+                )}
+              </View>
             </View>
 
             <TouchableOpacity 
