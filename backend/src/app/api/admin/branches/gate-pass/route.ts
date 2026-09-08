@@ -124,12 +124,23 @@ export async function POST(request: Request) {
         );
         const updatedAt = new Date();
 
-        await prisma.branch.update({
+        const updateData: any = {
+            gatePassToken: newToken,
+            gatePassUpdatedAt: updatedAt,
+        };
+
+        if (body.latitude !== undefined && body.longitude !== undefined) {
+            updateData.latitude = body.latitude !== null ? Number(body.latitude) : null;
+            updateData.longitude = body.longitude !== null ? Number(body.longitude) : null;
+        }
+
+        if (body.geofenceRadiusMeters !== undefined) {
+            updateData.geofenceRadiusMeters = Number(body.geofenceRadiusMeters) || 75;
+        }
+
+        const updatedBranch = await prisma.branch.update({
             where: { id: branch.id },
-            data: {
-                gatePassToken: newToken,
-                gatePassUpdatedAt: updatedAt,
-            }
+            data: updateData,
         });
 
         // Generate updated QR code image
@@ -145,11 +156,16 @@ export async function POST(request: Request) {
 
         return NextResponse.json({
             success: true,
-            message: "Gate QR Code regenerated successfully! Purana QR code ab turant expire ho gaya hai.",
+            message: "Gate QR Code regenerated with location lock successfully! Purana QR code ab turant expire ho gaya hai.",
             branch: {
-                id: branch.id,
-                name: branch.name,
-                code: branch.code,
+                id: updatedBranch.id,
+                name: updatedBranch.name,
+                code: updatedBranch.code,
+                address: updatedBranch.address,
+                city: updatedBranch.city,
+                latitude: updatedBranch.latitude,
+                longitude: updatedBranch.longitude,
+                geofenceRadiusMeters: updatedBranch.geofenceRadiusMeters,
                 gatePassUpdatedAt: updatedAt,
             },
             qrToken: newToken,

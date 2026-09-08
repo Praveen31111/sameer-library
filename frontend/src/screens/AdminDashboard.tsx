@@ -23,6 +23,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
 import { useAuth } from '../context/AuthContext';
 import { apiRequest } from '../services/api';
 import { COLORS } from '../utils/constants';
@@ -102,6 +103,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
   const [discountActive, setDiscountActive] = useState(false);
   const [offerTitle, setOfferTitle] = useState('Limited Time Offer: Book your monthly seat at a discount!');
   const [savingPricing, setSavingPricing] = useState(false);
+
+  // Gate Pass Geofence Location State
+  const [selectedGateLat, setSelectedGateLat] = useState<string>('');
+  const [selectedGateLng, setSelectedGateLng] = useState<string>('');
+  const [selectedGateRadius, setSelectedGateRadius] = useState<number>(75);
+  const [capturingGateLoc, setCapturingGateLoc] = useState<boolean>(false);
 
   // Live breakdown stats (library-wise and room-wise)
   const [libraryStats, setLibraryStats] = useState<any[]>([]);
@@ -712,6 +719,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
       const res = await apiRequest(`/admin/branches/gate-pass?branchId=${branch.id}`);
       if (res.success) {
         setGatePassData(res);
+        if (res.branch?.latitude) setSelectedGateLat(String(res.branch.latitude));
+        else setSelectedGateLat('');
+        if (res.branch?.longitude) setSelectedGateLng(String(res.branch.longitude));
+        else setSelectedGateLng('');
+        if (res.branch?.geofenceRadiusMeters) setSelectedGateRadius(res.branch.geofenceRadiusMeters);
+        else setSelectedGateRadius(75);
       } else {
         Alert.alert('Error', res.error || 'Failed to load gate pass');
       }
@@ -722,34 +735,65 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
     }
   };
 
-  // Admin Rotates / Regenerates Gate QR Token
+  // Capture Current Phone GPS Location for Library Gate
+  const handleCaptureCurrentGateLocation = async () => {
+    setCapturingGateLoc(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Location permission is needed to set library gate GPS coordinates.');
+        setCapturingGateLoc(false);
+        return;
+      }
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      if (loc?.coords) {
+        setSelectedGateLat(loc.coords.latitude.toFixed(6));
+        setSelectedGateLng(loc.coords.longitude.toFixed(6));
+        Alert.alert(
+          'Location Captured 📍',
+          `Latitude: ${loc.coords.latitude.toFixed(6)}\nLongitude: ${loc.coords.longitude.toFixed(6)}\n\nAb "Save Location & Generate QR" dabayein taki gate attendance is location par lock ho jaye.`
+        );
+      }
+    } catch (err: any) {
+      Alert.alert('GPS Error', err.message || 'Could not fetch device GPS location.');
+    } finally {
+      setCapturingGateLoc(false);
+    }
+  };
+
+  // Admin Rotates / Regenerates Gate QR Token with Location Lock
   const handleRegenerateGatePass = async (branchId: string) => {
     Alert.alert(
-      'Regenerate Gate QR?',
-      'Warning: Purana Gate QR code turant EXPIRE ho jayega. Gate par lage purane poster se koi bhi attendance mark nahi hogi.\n\nKya aap naya QR generate karna chahte hain?',
+      'Generate / Rotate Gate QR?',
+      `Naya QR Code generate hoga aur iski Location Lock save ho jayegi:\n\n📍 Coordinates: ${selectedGateLat || 'Not set'}, ${selectedGateLng || 'Not set'}\n📏 Allowed Radius: ${selectedGateRadius}m\n\nPurana gate code turant expire ho jayega. Kya aap aage badhna chahte hain?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Yes, Regenerate QR',
+          text: 'Yes, Save & Generate',
           style: 'destructive',
           onPress: async () => {
             setRegeneratingGatePass(true);
             try {
               const res = await apiRequest('/admin/branches/gate-pass', {
                 method: 'POST',
-                body: JSON.stringify({ branchId }),
+                body: JSON.stringify({
+                  branchId,
+                  latitude: selectedGateLat ? Number(selectedGateLat) : null,
+                  longitude: selectedGateLng ? Number(selectedGateLng) : null,
+                  geofenceRadiusMeters: Number(selectedGateRadius) || 75,
+                }),
               });
               if (res.success) {
                 setGatePassData((prev: any) => ({
                   ...prev,
                   qrToken: res.qrToken,
                   qrCodeUrl: res.qrCodeUrl,
-                  branch: {
-                    ...prev.branch,
-                    gatePassUpdatedAt: res.branch.gatePassUpdatedAt,
-                  },
+                  branch: res.branch,
                 }));
-                Alert.alert('Success 🎉', 'Naya QR Code safalta-purvak generate ho gaya hai! Purana QR expire ho chuka hai.');
+                Alert.alert(
+                  'Success 🎉',
+                  'Naya Gate QR Code location lock ke sath generate ho gaya hai!\n\nAb student sirf library premises ke andar khade hokar hi attendance punch kar sakega.'
+                );
               }
             } catch (err: any) {
               Alert.alert('Error', err.message || 'Failed to regenerate QR');
@@ -3300,26 +3344,160 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                   </Text>
                 </View>
 
-                {/* Regenerate Token Button */}
+                {/* Location Lock & Geofence Configuration Section */}
+                <View style={{
+                  backgroundColor: '#1c1c1e',
+                  borderRadius: 14,
+                  padding: 14,
+                  marginVertical: 10,
+                  borderWidth: 1,
+                  borderColor: '#2c2c2e',
+                }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                    <Ionicons name="location" size={18} color="#0d9488" />
+                    <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 13 }}>
+                      📍 Library Location Geofence Lock
+                    </Text>
+                  </View>
+
+                  <Text style={{ color: '#8e8e93', fontSize: 11, marginBottom: 10, lineHeight: 15 }}>
+                    Yaha library ki live location set karein taki student bahar se ya ghar baithe QR scan na kar sake.
+                  </Text>
+
+                  {/* Status Pill */}
+                  <View style={{
+                    backgroundColor: selectedGateLat && selectedGateLng ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                    padding: 8,
+                    borderRadius: 8,
+                    marginBottom: 10,
+                    borderWidth: 1,
+                    borderColor: selectedGateLat && selectedGateLng ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)',
+                  }}>
+                    <Text style={{
+                      color: selectedGateLat && selectedGateLng ? '#22c55e' : '#ef4444',
+                      fontSize: 11,
+                      fontWeight: '700',
+                    }}>
+                      {selectedGateLat && selectedGateLng
+                        ? `🔒 Geofence Set: Lat ${selectedGateLat}, Lng ${selectedGateLng} (${selectedGateRadius}m)`
+                        : '⚠️ No Location Lock Set (Student can scan from anywhere!)'}
+                    </Text>
+                  </View>
+
+                  {/* 1-Tap Capture GPS Button */}
+                  <TouchableOpacity
+                    style={{
+                      backgroundColor: '#0d9488',
+                      borderRadius: 10,
+                      paddingVertical: 10,
+                      paddingHorizontal: 12,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                      marginBottom: 12,
+                    }}
+                    onPress={handleCaptureCurrentGateLocation}
+                    disabled={capturingGateLoc}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="navigate" size={16} color="#ffffff" />
+                    <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 12 }}>
+                      {capturingGateLoc ? 'Capturing GPS...' : '📍 Use Current Location as Library Gate'}
+                    </Text>
+                  </TouchableOpacity>
+
+                  {/* Lat & Lng Input Row */}
+                  <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 10, color: '#8e8e93', fontWeight: '700', marginBottom: 4 }}>LATITUDE</Text>
+                      <TextInput
+                        style={{
+                          backgroundColor: '#2c2c2e',
+                          color: '#ffffff',
+                          paddingHorizontal: 10,
+                          paddingVertical: 8,
+                          borderRadius: 8,
+                          fontSize: 12,
+                        }}
+                        placeholder="e.g. 27.1452"
+                        placeholderTextColor="#64748b"
+                        value={selectedGateLat}
+                        onChangeText={setSelectedGateLat}
+                        keyboardType="numeric"
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 10, color: '#8e8e93', fontWeight: '700', marginBottom: 4 }}>LONGITUDE</Text>
+                      <TextInput
+                        style={{
+                          backgroundColor: '#2c2c2e',
+                          color: '#ffffff',
+                          paddingHorizontal: 10,
+                          paddingVertical: 8,
+                          borderRadius: 8,
+                          fontSize: 12,
+                        }}
+                        placeholder="e.g. 83.5621"
+                        placeholderTextColor="#64748b"
+                        value={selectedGateLng}
+                        onChangeText={setSelectedGateLng}
+                        keyboardType="numeric"
+                      />
+                    </View>
+                  </View>
+
+                  {/* Radius Selector */}
+                  <Text style={{ fontSize: 10, color: '#8e8e93', fontWeight: '700', marginBottom: 6 }}>
+                    ALLOWED SCAN RADIUS (GEOFENCE DISTANCE)
+                  </Text>
+                  <View style={{ flexDirection: 'row', gap: 6, marginBottom: 4 }}>
+                    {[30, 50, 75, 100].map((radius) => (
+                      <TouchableOpacity
+                        key={radius}
+                        style={{
+                          flex: 1,
+                          paddingVertical: 6,
+                          borderRadius: 8,
+                          alignItems: 'center',
+                          backgroundColor: selectedGateRadius === radius ? '#0d9488' : '#2c2c2e',
+                        }}
+                        onPress={() => setSelectedGateRadius(radius)}
+                      >
+                        <Text style={{
+                          color: selectedGateRadius === radius ? '#ffffff' : '#8e8e93',
+                          fontSize: 11,
+                          fontWeight: '800',
+                        }}>
+                          {radius}m
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                {/* Regenerate & Lock Token Button */}
                 <TouchableOpacity
                   style={{
-                    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+                    backgroundColor: 'rgba(239, 68, 68, 0.15)',
                     borderColor: '#ef4444',
-                    borderWidth: 1,
+                    borderWidth: 1.5,
                     borderRadius: 12,
                     paddingVertical: 12,
                     flexDirection: 'row',
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: 8,
-                    marginTop: 8,
+                    marginTop: 6,
+                    marginBottom: 16,
                   }}
                   onPress={() => handleRegenerateGatePass(gatePassData.branch?.id)}
                   disabled={regeneratingGatePass}
+                  activeOpacity={0.85}
                 >
                   <Ionicons name="refresh" size={18} color="#ef4444" />
-                  <Text style={{ color: '#ef4444', fontWeight: '700', fontSize: 13 }}>
-                    {regeneratingGatePass ? 'Regenerating...' : '🔄 Regenerate QR (Expire Old)'}
+                  <Text style={{ color: '#ef4444', fontWeight: '800', fontSize: 13 }}>
+                    {regeneratingGatePass ? 'Generating Locked Pass...' : '🔄 Save Location & Regenerate QR'}
                   </Text>
                 </TouchableOpacity>
               </ScrollView>

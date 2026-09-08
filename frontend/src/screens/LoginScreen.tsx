@@ -166,6 +166,36 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigate }) => {
     }
   };
 
+  // 1-Tap Demo Student Login (For instant Expo Go testing of Attendance, QR scan, Dues, etc.)
+  const handleDemoStudentLogin = async () => {
+    setLoading(true);
+    try {
+      const res = await apiRequest('/auth/demo-student', {
+        method: 'POST',
+      });
+
+      setLoading(false);
+      if (res.success && res.token && res.user) {
+        await login(res.token, res.user);
+        Alert.alert(
+          'Demo Student Active 🎉',
+          `Welcome, ${res.user.name}!\n\nAapka Seat Admission APPROVE hai (${res.demoBooking?.seatNumber || 'A-01'}).\n\nAb aap Gate QR Scan karke Attendance Punch IN/OUT aur Fee Dues sab test kar sakte hain!`
+        );
+        onNavigate('StudentDashboard');
+      } else {
+        // Fallback: autofill demo credentials
+        setEmail('student@sameerlibrary.com');
+        setPassword('student123');
+        Alert.alert('Demo Credentials Filled', 'Email: student@sameerlibrary.com\nPassword: student123\n\nClick "Sign In as Student" to continue.');
+      }
+    } catch (err: any) {
+      setLoading(false);
+      setEmail('student@sameerlibrary.com');
+      setPassword('student123');
+      Alert.alert('Demo Credentials Autofilled', 'Email: student@sameerlibrary.com\nPassword: student123\n\nClick "Sign In as Student" to enter.');
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
@@ -270,6 +300,66 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigate }) => {
                 {loading ? 'Signing In...' : activeTab === 'student' ? 'Sign In as Student' : 'Sign In as Admin'}
               </Text>
             </TouchableOpacity>
+
+            {/* 1-Tap Demo Student Login Button */}
+            {activeTab === 'student' && (
+              <TouchableOpacity
+                style={{
+                  backgroundColor: '#059669',
+                  borderRadius: 12,
+                  paddingVertical: 14,
+                  paddingHorizontal: 16,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 10,
+                  marginTop: 14,
+                  borderWidth: 1,
+                  borderColor: '#10b981',
+                  elevation: 3,
+                  shadowColor: '#059669',
+                  shadowOpacity: 0.35,
+                  shadowRadius: 6,
+                }}
+                onPress={handleDemoStudentLogin}
+                disabled={loading}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="flash" size={20} color="#ffffff" />
+                <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 14 }}>
+                  ⚡ 1-Tap Demo Student Login (Test App)
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Admin Quick Autofill Helper */}
+            {activeTab === 'admin' && (
+              <TouchableOpacity
+                style={{
+                  backgroundColor: 'rgba(255, 255, 255, 0.06)',
+                  borderRadius: 10,
+                  paddingVertical: 10,
+                  paddingHorizontal: 14,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  marginTop: 14,
+                  borderWidth: 1,
+                  borderColor: 'rgba(255, 255, 255, 0.12)',
+                }}
+                onPress={() => {
+                  setEmail('admin@sameerlibrary.com');
+                  setPassword('admin123');
+                }}
+                activeOpacity={0.75}
+              >
+                <Ionicons name="key-outline" size={16} color="#8e8e93" />
+                <Text style={{ color: '#8e8e93', fontSize: 12, fontWeight: '600' }}>
+                  Autofill Admin (admin@sameerlibrary.com / admin123)
+                </Text>
+              </TouchableOpacity>
+            )}
 
             {/* Divider */}
             {activeTab === 'student' && (
