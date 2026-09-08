@@ -33,7 +33,7 @@ interface AdminDashboardProps {
 
 const { width } = Dimensions.get('window');
 
-type AdminTab = 'Overview' | 'Bookings' | 'Facilities' | 'Live' | 'Students' | 'Logs';
+type AdminTab = 'Overview' | 'Bookings' | 'Dues' | 'Facilities' | 'Live' | 'Students' | 'Logs';
 
 // Curated high-aesthetic modern study spaces
 const PHOTO_PRESETS = [
@@ -61,9 +61,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
   const [bookings, setBookings] = useState<any[]>([]);
   const [bookingActionLoading, setBookingActionLoading] = useState<string | null>(null);
 
-  // Approval Modal with Online / Offline payment selection
+  // Approval Modal with Cash / Admin GPay / Pay Later selection
   const [approvalModalVisible, setApprovalModalVisible] = useState(false);
   const [selectedBookingToApprove, setSelectedBookingToApprove] = useState<any>(null);
+  const [approvalUtr, setApprovalUtr] = useState('');
+  const [showUtrInput, setShowUtrInput] = useState(false);
+
+  // Fee Dues & Defaulters State
+  const [duesStats, setDuesStats] = useState<any>(null);
+  const [duesStudents, setDuesStudents] = useState<any[]>([]);
+  const [duesFilter, setDuesFilter] = useState<'ALL' | 'DUE' | 'OVERDUE' | 'PAID'>('ALL');
+  const [duesLoading, setDuesLoading] = useState(false);
+  const [collectPaymentModalVisible, setCollectPaymentModalVisible] = useState(false);
+  const [selectedDueStudent, setSelectedDueStudent] = useState<any>(null);
+  const [collectAmount, setCollectAmount] = useState('');
+  const [collectMode, setCollectMode] = useState<'OFFLINE_CASH' | 'ADMIN_GPAY'>('OFFLINE_CASH');
+  const [collectRemarks, setCollectRemarks] = useState('');
+  const [submittingCollection, setSubmittingCollection] = useState(false);
+
+  // Universal Entrance Gate QR Pass State
+  const [gatePassModalVisible, setGatePassModalVisible] = useState(false);
+  const [gatePassData, setGatePassData] = useState<any>(null);
+  const [gatePassLoading, setGatePassLoading] = useState(false);
+  const [regeneratingGatePass, setRegeneratingGatePass] = useState(false);
+
+  // Digital Student ID Pass (Barcode + QR) State
+  const [studentPassModalVisible, setStudentPassModalVisible] = useState(false);
+  const [studentPassData, setStudentPassData] = useState<any>(null);
+  const [studentPassLoading, setStudentPassLoading] = useState(false);
 
   // Revenue Breakdown Ledger Modal
   const [revenueModalVisible, setRevenueModalVisible] = useState(false);
@@ -356,6 +381,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
       await Promise.all([fetchStats(), fetchPricing()]);
     }
     else if (activeTab === 'Bookings') await fetchBookings(bookingFilter);
+    else if (activeTab === 'Dues') await fetchDuesData(duesFilter);
     else if (activeTab === 'Facilities') {
       if (facilityLevel === 'branches') await fetchBranches();
       else if (facilityLevel === 'rooms' && selectedBranch) await fetchRoomsForBranch(selectedBranch.id);
@@ -364,7 +390,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
     else if (activeTab === 'Students') await fetchStudents();
     else if (activeTab === 'Logs') await fetchLogs();
     setLoading(false);
-  }, [activeTab, bookingFilter, facilityLevel, selectedBranch, selectedRoom]);
+  }, [activeTab, bookingFilter, duesFilter, facilityLevel, selectedBranch, selectedRoom]);
 
   useEffect(() => {
     loadActiveTabData();
@@ -545,43 +571,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
   // Open Approval Modal
   const handleOpenApprovalModal = (booking: any) => {
     setSelectedBookingToApprove(booking);
+    setApprovalUtr('');
+    setShowUtrInput(false);
     setApprovalModalVisible(true);
   };
 
-  // Approve with payment method selection (Online or Offline)
-  const handleApproveWithPayment = async (paymentMode: 'ONLINE' | 'OFFLINE') => {
+  // Approve with Payment Option (💵 Cash, 📲 Admin GPay, or 🟡 Pay Later / Due)
+  const handleApproveWithPayment = async (
+    paymentAction: 'PAID' | 'DUE',
+    paymentMode: 'OFFLINE_CASH' | 'ADMIN_GPAY' = 'OFFLINE_CASH',
+    referenceId: string = ''
+  ) => {
     if (!selectedBookingToApprove) return;
     const booking = selectedBookingToApprove;
     const approvedAmount = Number(booking.amount) || 0;
     setApprovalModalVisible(false);
     setBookingActionLoading(booking.id);
-
-    // 1. INSTANT OPTIMISTIC REVENUE & STATS UPDATE ON THE SCREEN
-    setStatsData((prev: any) => ({
-      ...prev,
-      revenue: (prev?.revenue || 0) + approvedAmount,
-      pendingApprovals: Math.max((prev?.pendingApprovals || 1) - 1, 0),
-      activeBookings: (prev?.activeBookings || 0) + 1,
-    }));
-
-    // 2. PREPEND TO PAYMENT LOGS IMMEDIATELY SO IT APPEARS IN REVENUE BREAKDOWN
-    const newPaymentEntry = {
-      id: `pay_${Date.now()}`,
-      transactionId: `${paymentMode === 'ONLINE' ? 'UPI_ONLINE' : 'CASH_DESK'}_${Date.now()}`,
-      studentName: booking.student?.name || 'Student',
-      studentEmail: booking.student?.email || 'N/A',
-      studentPhone: booking.student?.phone || null,
-      seatNumber: booking.seat || 'Seat',
-      roomName: booking.room || 'Silent Zone',
-      branchName: booking.branch || 'Main Library',
-      amount: approvedAmount,
-      plan: booking.planType || 'MONTHLY',
-      date: new Date().toLocaleDateString(),
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      status: 'success',
-      method: paymentMode === 'ONLINE' ? 'Online (UPI / Netbanking)' : 'Offline (Cash / Counter)',
-    };
-    setPaymentLogs((prev) => [newPaymentEntry, ...prev]);
 
     try {
       const res = await apiRequest('/admin/bookings', {
@@ -589,35 +594,195 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
         body: JSON.stringify({
           bookingId: booking.id,
           action: 'approve',
+          paymentAction,
           paymentMode,
+          referenceId: referenceId || undefined,
         }),
       });
 
       if (res.success) {
-        Alert.alert(
-          'Booking Approved 🎉',
-          `Seat ${booking.seat} approved successfully!\n\n💰 ₹${approvedAmount} added to Monthly Revenue (${paymentMode === 'ONLINE' ? 'Online Payment' : 'Cash/Counter'}).`,
-          [
-            { text: 'Done', style: 'cancel' },
-            {
-              text: '💬 Send on WhatsApp',
-              onPress: () => sendWhatsAppNotification(booking),
-            },
-          ]
-        );
+        if (paymentAction === 'PAID') {
+          Alert.alert(
+            'Booking Approved & Paid 🎉',
+            `Seat ${booking.seat} approved successfully!\n\n💰 ₹${approvedAmount} received via ${paymentMode === 'ADMIN_GPAY' ? 'Admin GPay / UPI' : 'Cash Counter'}.\nReceipt generated with ₹0 Due.`,
+            [
+              { text: 'Done', style: 'cancel' },
+              {
+                text: '💬 Send on WhatsApp',
+                onPress: () => sendWhatsAppNotification(booking),
+              },
+            ]
+          );
+        } else {
+          Alert.alert(
+            'Approved Without Payment 🟡',
+            `Seat ${booking.seat} is now CONFIRMED & APPROVED!\n\nStudent will pay later. ₹${approvedAmount} has been added to the Student's Due Balance.`,
+            [
+              { text: 'Done', style: 'cancel' },
+              {
+                text: '💬 Send WhatsApp Bill',
+                onPress: () => sendWhatsAppNotification(booking),
+              },
+            ]
+          );
+        }
         fetchBookings(bookingFilter);
-        fetchLogs(); // Synchronize with backend database payments!
         fetchStats();
       } else {
         Alert.alert('Error', res.error || 'Failed to approve booking.');
-        fetchStats();
       }
     } catch (err: any) {
       Alert.alert('Error', err.message || 'Action failed');
-      fetchStats();
     } finally {
       setBookingActionLoading(null);
       setSelectedBookingToApprove(null);
+    }
+  };
+
+  // Fetch Dues & Defaulters Data
+  const fetchDuesData = async (filter: string = 'ALL') => {
+    setDuesLoading(true);
+    try {
+      const res = await apiRequest(`/admin/payments/dues?filter=${filter}`);
+      if (res.stats) setDuesStats(res.stats);
+      if (res.students) setDuesStudents(res.students);
+    } catch (err) {
+      console.error('Failed to load dues:', err);
+    } finally {
+      setDuesLoading(false);
+    }
+  };
+
+  // Collect Cash / Partial Payment from student
+  const handleCollectPaymentSubmit = async () => {
+    if (!selectedDueStudent) return;
+    const amount = Number(collectAmount);
+    if (isNaN(amount) || amount <= 0) {
+      Alert.alert('Invalid Amount', 'Please enter a valid amount.');
+      return;
+    }
+    setSubmittingCollection(true);
+    try {
+      const res = await apiRequest('/admin/payments/collect', {
+        method: 'POST',
+        body: JSON.stringify({
+          bookingId: selectedDueStudent.id,
+          amount,
+          paymentMode: collectMode,
+          remarks: collectRemarks,
+        }),
+      });
+      if (res.success) {
+        Alert.alert(
+          'Payment Collected ✅',
+          `₹${amount} recorded for ${selectedDueStudent.studentName}!\nReceipt: ${res.receipt?.receiptNumber}`
+        );
+        setCollectPaymentModalVisible(false);
+        setCollectAmount('');
+        setCollectRemarks('');
+        fetchDuesData(duesFilter);
+        fetchStats();
+      } else {
+        Alert.alert('Error', res.error || 'Failed to record payment');
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Payment collection failed');
+    } finally {
+      setSubmittingCollection(false);
+    }
+  };
+
+  // Send 0-Cost WhatsApp Bill Reminder
+  const handleSendWhatsAppReminder = async (student: any) => {
+    try {
+      const res = await apiRequest('/admin/reminders/whatsapp', {
+        method: 'POST',
+        body: JSON.stringify({ bookingId: student.id }),
+      });
+      if (res.success && res.whatsappUrl) {
+        Linking.openURL(res.whatsappUrl);
+        fetchDuesData(duesFilter);
+      } else {
+        Alert.alert('WhatsApp Error', res.error || 'Could not generate WhatsApp bill link');
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to open WhatsApp');
+    }
+  };
+
+  // Open Entrance Gate QR Pass Poster for branch
+  const handleOpenGatePass = async (branch: any) => {
+    setGatePassLoading(true);
+    setGatePassModalVisible(true);
+    try {
+      const res = await apiRequest(`/admin/branches/gate-pass?branchId=${branch.id}`);
+      if (res.success) {
+        setGatePassData(res);
+      } else {
+        Alert.alert('Error', res.error || 'Failed to load gate pass');
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to load gate pass');
+    } finally {
+      setGatePassLoading(false);
+    }
+  };
+
+  // Admin Rotates / Regenerates Gate QR Token
+  const handleRegenerateGatePass = async (branchId: string) => {
+    Alert.alert(
+      'Regenerate Gate QR?',
+      'Warning: Purana Gate QR code turant EXPIRE ho jayega. Gate par lage purane poster se koi bhi attendance mark nahi hogi.\n\nKya aap naya QR generate karna chahte hain?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Yes, Regenerate QR',
+          style: 'destructive',
+          onPress: async () => {
+            setRegeneratingGatePass(true);
+            try {
+              const res = await apiRequest('/admin/branches/gate-pass', {
+                method: 'POST',
+                body: JSON.stringify({ branchId }),
+              });
+              if (res.success) {
+                setGatePassData((prev: any) => ({
+                  ...prev,
+                  qrToken: res.qrToken,
+                  qrCodeUrl: res.qrCodeUrl,
+                  branch: {
+                    ...prev.branch,
+                    gatePassUpdatedAt: res.branch.gatePassUpdatedAt,
+                  },
+                }));
+                Alert.alert('Success 🎉', 'Naya QR Code safalta-purvak generate ho gaya hai! Purana QR expire ho chuka hai.');
+              }
+            } catch (err: any) {
+              Alert.alert('Error', err.message || 'Failed to regenerate QR');
+            } finally {
+              setRegeneratingGatePass(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // Open Student ID Pass Modal with Barcode & QR Code
+  const handleOpenStudentPass = async (booking: any) => {
+    setStudentPassLoading(true);
+    setStudentPassModalVisible(true);
+    try {
+      const res = await apiRequest(`/admin/pass?bookingId=${booking.id}`);
+      if (res.success) {
+        setStudentPassData(res.pass);
+      } else {
+        Alert.alert('Pass Error', res.error || 'Could not load student pass');
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to fetch student pass');
+    } finally {
+      setStudentPassLoading(false);
     }
   };
 
@@ -1302,19 +1467,47 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                   ) : (
                     <View style={[styles.actionButtonsRow, { justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }]}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                        <Ionicons name="shield-checkmark" size={16} color={COLORS.primary} />
-                        <Text style={{ fontSize: 12, fontWeight: '700', color: COLORS.primary }}>Payment Confirmed</Text>
+                        {item.dueAmount > 0 ? (
+                          <View style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 }}>
+                            <Text style={{ fontSize: 11, fontWeight: '800', color: '#ef4444' }}>Due: ₹{item.dueAmount}</Text>
+                          </View>
+                        ) : (
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                            <Ionicons name="shield-checkmark" size={15} color={COLORS.primary} />
+                            <Text style={{ fontSize: 11, fontWeight: '700', color: COLORS.primary }}>Paid</Text>
+                          </View>
+                        )}
                       </View>
-                      {item.student?.phone && (
+
+                      <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
                         <TouchableOpacity
-                          style={styles.whatsappActionBtn}
-                          onPress={() => sendWhatsAppNotification(item)}
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 4,
+                            backgroundColor: '#0284c7',
+                            paddingHorizontal: 8,
+                            paddingVertical: 5,
+                            borderRadius: 8,
+                          }}
+                          onPress={() => handleOpenStudentPass(item)}
                           activeOpacity={0.85}
                         >
-                          <Ionicons name="logo-whatsapp" size={15} color="#22c55e" />
-                          <Text style={styles.whatsappActionBtnText}>WhatsApp</Text>
+                          <Ionicons name="id-card-outline" size={14} color="#ffffff" />
+                          <Text style={{ fontSize: 11, fontWeight: '700', color: '#ffffff' }}>Pass</Text>
                         </TouchableOpacity>
-                      )}
+
+                        {item.student?.phone && (
+                          <TouchableOpacity
+                            style={styles.whatsappActionBtn}
+                            onPress={() => sendWhatsAppNotification(item)}
+                            activeOpacity={0.85}
+                          >
+                            <Ionicons name="logo-whatsapp" size={14} color="#22c55e" />
+                            <Text style={styles.whatsappActionBtnText}>WhatsApp</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
                     </View>
                   )}
                 </View>
@@ -1324,7 +1517,216 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
           </View>
         );
 
-      // 3. FACILITIES TAB (Branches -> Rooms -> Seats with Edit & Photo Showcase)
+      // 3. DUES & OVERDUE DEFAULTERS TAB
+      case 'Dues':
+        return (
+          <View style={{ flex: 1 }}>
+            {/* Dues Stats Summary Cards */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={{ maxHeight: 110, paddingHorizontal: 12, marginVertical: 8 }}
+            >
+              {/* Collected */}
+              <View style={[styles.dueStatCard, { backgroundColor: '#059669' }]}>
+                <Text style={styles.dueStatLabel}>TOTAL COLLECTED</Text>
+                <Text style={styles.dueStatValue}>₹{(duesStats?.totalRevenueCollected || 0).toLocaleString()}</Text>
+                <Text style={styles.dueStatSub}>
+                  Cash: ₹{duesStats?.cashCollected || 0} • GPay: ₹{duesStats?.gpayCollected || 0}
+                </Text>
+              </View>
+
+              {/* Pending Due */}
+              <View style={[styles.dueStatCard, { backgroundColor: '#d97706' }]}>
+                <Text style={styles.dueStatLabel}>PENDING DUES</Text>
+                <Text style={styles.dueStatValue}>₹{(duesStats?.totalDueOutstanding || 0).toLocaleString()}</Text>
+                <Text style={styles.dueStatSub}>{duesStats?.dueStudentsCount || 0} Students pending</Text>
+              </View>
+
+              {/* Overdue Defaulters */}
+              <View style={[styles.dueStatCard, { backgroundColor: '#dc2626' }]}>
+                <Text style={styles.dueStatLabel}>OVERDUE</Text>
+                <Text style={styles.dueStatValue}>{duesStats?.overdueStudentsCount || 0}</Text>
+                <Text style={styles.dueStatSub}>Defaulters count</Text>
+              </View>
+
+              {/* Cleared Ratio */}
+              <View style={[styles.dueStatCard, { backgroundColor: '#1e293b' }]}>
+                <Text style={styles.dueStatLabel}>CLEARED RATIO</Text>
+                <Text style={styles.dueStatValue}>
+                  {duesStats?.fullyPaidStudentsCount || 0} / {duesStats?.totalActiveSeats || 0}
+                </Text>
+                <Text style={styles.dueStatSub}>Fully paid students</Text>
+              </View>
+            </ScrollView>
+
+            {/* Filter Pills */}
+            <View style={styles.filterContainer}>
+              {(['ALL', 'DUE', 'OVERDUE', 'PAID'] as const).map((filter) => (
+                <TouchableOpacity
+                  key={filter}
+                  style={[styles.filterBtn, duesFilter === filter && styles.filterBtnActive]}
+                  onPress={() => {
+                    setDuesFilter(filter);
+                    fetchDuesData(filter);
+                  }}
+                >
+                  <Text style={[styles.filterBtnText, duesFilter === filter && styles.filterBtnTextActive]}>
+                    {filter}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Students Dues List */}
+            {duesLoading ? (
+              <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                <ActivityIndicator size="large" color="#0d9488" />
+                <Text style={{ color: '#8e8e93', marginTop: 10 }}>Loading student dues...</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={duesStudents}
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={styles.flatListContent}
+                refreshControl={
+                  <RefreshControl
+                    refreshing={refreshing}
+                    onRefresh={() => fetchDuesData(duesFilter)}
+                    tintColor="#0d9488"
+                  />
+                }
+                renderItem={({ item }) => (
+                  <View style={styles.bookingItemCard}>
+                    <View style={styles.bookingHeaderRow}>
+                      <View style={styles.bookingStudentInfo}>
+                        <Text style={styles.bookingStudentName}>{item.studentName}</Text>
+                        <Text style={styles.bookingStudentEmail}>
+                          Seat {item.seatNumber} • {item.branchName}
+                        </Text>
+                        {item.studentPhone && (
+                          <Text style={styles.bookingStudentPhone}>📞 {item.studentPhone}</Text>
+                        )}
+                      </View>
+
+                      <View
+                        style={[
+                          styles.statusPill,
+                          item.paymentStatus === 'PAID' && styles.statusApproved,
+                          item.paymentStatus === 'DUE' && styles.statusPending,
+                          item.paymentStatus === 'OVERDUE' && styles.statusRejected,
+                        ]}
+                      >
+                        <Text style={styles.statusPillText}>{item.paymentStatus}</Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.divider} />
+
+                    {/* Financial Numbers */}
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6 }}>
+                      <View>
+                        <Text style={{ fontSize: 11, color: '#8e8e93' }}>Total Fee</Text>
+                        <Text style={{ fontSize: 14, fontWeight: '700', color: '#ffffff' }}>₹{item.totalFee}</Text>
+                      </View>
+                      <View>
+                        <Text style={{ fontSize: 11, color: '#8e8e93' }}>Paid</Text>
+                        <Text style={{ fontSize: 14, fontWeight: '700', color: '#22c55e' }}>₹{item.paidAmount}</Text>
+                      </View>
+                      <View style={{ alignItems: 'flex-end' }}>
+                        <Text style={{ fontSize: 11, color: '#8e8e93' }}>Due Balance</Text>
+                        <Text style={{ fontSize: 15, fontWeight: '800', color: item.dueAmount > 0 ? '#ef4444' : '#22c55e' }}>
+                          ₹{item.dueAmount}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Actions */}
+                    {item.dueAmount > 0 ? (
+                      <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+                        <TouchableOpacity
+                          style={{
+                            flex: 1,
+                            backgroundColor: '#22c55e',
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 6,
+                            paddingVertical: 10,
+                            borderRadius: 10,
+                          }}
+                          onPress={() => handleSendWhatsAppReminder(item)}
+                          activeOpacity={0.85}
+                        >
+                          <Ionicons name="logo-whatsapp" size={16} color="#ffffff" />
+                          <Text style={{ color: '#ffffff', fontWeight: '700', fontSize: 12 }}>
+                            WhatsApp Bill
+                          </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={{
+                            flex: 1,
+                            backgroundColor: '#0d9488',
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 6,
+                            paddingVertical: 10,
+                            borderRadius: 10,
+                          }}
+                          onPress={() => {
+                            setSelectedDueStudent(item);
+                            setCollectAmount(String(item.dueAmount));
+                            setCollectPaymentModalVisible(true);
+                          }}
+                          activeOpacity={0.85}
+                        >
+                          <Ionicons name="cash-outline" size={16} color="#ffffff" />
+                          <Text style={{ color: '#ffffff', fontWeight: '700', fontSize: 12 }}>
+                            Collect Fee
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
+                      <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 6 }}>
+                        <TouchableOpacity
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 4,
+                            backgroundColor: '#0284c7',
+                            paddingHorizontal: 10,
+                            paddingVertical: 6,
+                            borderRadius: 8,
+                          }}
+                          onPress={() => handleOpenStudentPass(item)}
+                          activeOpacity={0.85}
+                        >
+                          <Ionicons name="id-card-outline" size={14} color="#ffffff" />
+                          <Text style={{ fontSize: 12, fontWeight: '700', color: '#ffffff' }}>View Pass</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
+                )}
+                ListEmptyComponent={
+                  <View style={{ alignItems: 'center', paddingVertical: 40 }}>
+                    <Ionicons name="checkmark-circle-outline" size={48} color="#22c55e" />
+                    <Text style={{ color: '#ffffff', fontWeight: '700', marginTop: 10, fontSize: 15 }}>
+                      No Students Found
+                    </Text>
+                    <Text style={{ color: '#8e8e93', fontSize: 12, marginTop: 4 }}>
+                      All student dues for this filter are cleared.
+                    </Text>
+                  </View>
+                }
+              />
+            )}
+          </View>
+        );
+
+      // 4. FACILITIES TAB (Branches -> Rooms -> Seats with Edit & Photo Showcase)
       case 'Facilities':
         return (
           <View style={{ flex: 1 }}>
@@ -1402,9 +1804,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                         </View>
                       </View>
 
-                      <View style={styles.facilityCardStats}>
+                      <View style={[styles.facilityCardStats, { flexWrap: 'wrap', gap: 6 }]}>
                         <Text style={styles.facilityStatPill}>🚪 {item.roomCount} Rooms</Text>
                         <Text style={styles.facilityStatPill}>🪑 {item.totalSeats} Total Seats</Text>
+                        <TouchableOpacity
+                          style={[styles.managePillBtn, { backgroundColor: '#0284c7', flexDirection: 'row', alignItems: 'center', gap: 4 }]}
+                          onPress={() => handleOpenGatePass(item)}
+                        >
+                          <Ionicons name="qr-code-outline" size={13} color="#ffffff" />
+                          <Text style={[styles.managePillText, { color: '#ffffff' }]}>Gate QR Pass</Text>
+                        </TouchableOpacity>
                         <TouchableOpacity
                           style={styles.managePillBtn}
                           onPress={() => {
@@ -1412,7 +1821,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                             setFacilityLevel('rooms');
                           }}
                         >
-                          <Text style={styles.managePillText}>Manage Rooms →</Text>
+                          <Text style={styles.managePillText}>Rooms →</Text>
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -1954,6 +2363,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
         </TouchableOpacity>
 
         <TouchableOpacity
+          style={[styles.tabButton, activeTab === 'Dues' && styles.tabButtonActive]}
+          onPress={() => {
+            setActiveTab('Dues');
+            fetchDuesData(duesFilter);
+          }}
+        >
+          <Ionicons name={activeTab === 'Dues' ? 'wallet' : 'wallet-outline'} size={18} color={activeTab === 'Dues' ? '#0d9488' : '#8e8e93'} />
+          <Text style={[styles.tabButtonText, activeTab === 'Dues' && styles.tabButtonTextActive]}>Dues</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
           style={[styles.tabButton, activeTab === 'Facilities' && styles.tabButtonActive]}
           onPress={() => {
             setActiveTab('Facilities');
@@ -2277,38 +2697,77 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
 
             <Text style={styles.paymentMethodPrompt}>Select Payment Receipt Mode:</Text>
 
+            {/* Option 1: Cash at Counter */}
             <TouchableOpacity
               style={styles.paymentOptionCard}
-              onPress={() => handleApproveWithPayment('ONLINE')}
+              onPress={() => handleApproveWithPayment('PAID', 'OFFLINE_CASH')}
               activeOpacity={0.85}
             >
-              <View style={[styles.paymentOptionIconBox, { backgroundColor: 'rgba(13, 148, 136, 0.15)' }]}>
-                <Ionicons name="card" size={24} color={COLORS.primary} />
+              <View style={[styles.paymentOptionIconBox, { backgroundColor: 'rgba(34, 197, 94, 0.15)' }]}>
+                <Ionicons name="cash" size={24} color="#22c55e" />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.paymentOptionTitle}>Online Payment Received</Text>
-                <Text style={styles.paymentOptionSub}>UPI, QR Code, GPay, PhonePe, or Netbanking</Text>
+                <Text style={[styles.paymentOptionTitle, { color: '#22c55e' }]}>💵 Cash Received at Counter</Text>
+                <Text style={styles.paymentOptionSub}>Physical cash received at desk. Receipt generated with ₹0 Due.</Text>
               </View>
-              <Ionicons name="chevron-forward" size={18} color={COLORS.primary} />
+              <Ionicons name="chevron-forward" size={18} color="#22c55e" />
+            </TouchableOpacity>
+
+            {/* Option 2: Admin GPay / PhonePe / Direct QR */}
+            <TouchableOpacity
+              style={[styles.paymentOptionCard, { marginTop: 10 }]}
+              onPress={() => setShowUtrInput(!showUtrInput)}
+              activeOpacity={0.85}
+            >
+              <View style={[styles.paymentOptionIconBox, { backgroundColor: 'rgba(2, 132, 199, 0.15)' }]}>
+                <Ionicons name="phone-portrait" size={24} color="#0284c7" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.paymentOptionTitle, { color: '#0284c7' }]}>📲 Admin GPay / Direct UPI</Text>
+                <Text style={styles.paymentOptionSub}>Student sent fees directly to Admin QR / UPI ID.</Text>
+              </View>
+              <Ionicons name={showUtrInput ? 'chevron-up' : 'chevron-down'} size={18} color="#0284c7" />
+            </TouchableOpacity>
+
+            {/* UTR Input Section if Admin GPay is toggled */}
+            {showUtrInput && (
+              <View style={{ backgroundColor: '#1c1c1e', padding: 12, borderRadius: 12, marginTop: 8, borderWidth: 1, borderColor: '#0284c7' }}>
+                <Text style={{ fontSize: 11, color: '#8e8e93', marginBottom: 4 }}>UPI / UTR Ref ID (Optional):</Text>
+                <TextInput
+                  style={[styles.modalInput, { height: 40, marginBottom: 8 }]}
+                  placeholder="e.g. 425192847291"
+                  placeholderTextColor="#8e8e93"
+                  value={approvalUtr}
+                  onChangeText={setApprovalUtr}
+                />
+                <TouchableOpacity
+                  style={{ backgroundColor: '#0284c7', paddingVertical: 10, borderRadius: 8, alignItems: 'center' }}
+                  onPress={() => handleApproveWithPayment('PAID', 'ADMIN_GPAY', approvalUtr)}
+                  activeOpacity={0.85}
+                >
+                  <Text style={{ color: '#ffffff', fontWeight: '700', fontSize: 13 }}>Confirm GPay Received (₹0 Due)</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Option 3: Approve Without Payment (Pay Later / Due) */}
+            <TouchableOpacity
+              style={[styles.paymentOptionCard, { marginTop: 10, borderColor: 'rgba(245, 158, 11, 0.4)' }]}
+              onPress={() => handleApproveWithPayment('DUE')}
+              activeOpacity={0.85}
+            >
+              <View style={[styles.paymentOptionIconBox, { backgroundColor: 'rgba(245, 158, 11, 0.15)' }]}>
+                <Ionicons name="time" size={24} color="#f59e0b" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.paymentOptionTitle, { color: '#f59e0b' }]}>🟡 Approve Without Payment (Pay Later)</Text>
+                <Text style={styles.paymentOptionSub}>Seat confirmed & APPROVED. Full fee amount goes to Due Balance.</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#f59e0b" />
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.paymentOptionCard, { marginTop: 12 }]}
-              onPress={() => handleApproveWithPayment('OFFLINE')}
-              activeOpacity={0.85}
-            >
-              <View style={[styles.paymentOptionIconBox, { backgroundColor: 'rgba(234, 179, 8, 0.15)' }]}>
-                <Ionicons name="cash" size={24} color="#eab308" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.paymentOptionTitle}>Offline / Cash Payment Received</Text>
-                <Text style={styles.paymentOptionSub}>Physical cash received at reception counter</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color="#eab308" />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.cancelModalBtn}
+              style={[styles.cancelModalBtn, { marginTop: 14 }]}
               onPress={() => setApprovalModalVisible(false)}
             >
               <Text style={styles.cancelModalBtnText}>Cancel</Text>
@@ -2689,6 +3148,275 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
             >
               <Text style={styles.modalSubmitBtnText}>
                 {savingPricing ? 'Saving Changes...' : 'Save & Apply Price Changes'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* MODAL: Entrance Gate Attendance QR Pass */}
+      <Modal
+        visible={gatePassModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setGatePassModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Pressable style={styles.modalBackdrop} onPress={() => setGatePassModalVisible(false)} />
+          <View style={[styles.modalContent, { maxHeight: '90%', paddingBottom: 16 }]}>
+            <View style={styles.modalHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.modalTitle}>🚪 Entrance Gate Attendance Pass</Text>
+                <Text style={styles.modalSubTitle}>
+                  {gatePassData?.branch?.name || 'Library Branch'} ({gatePassData?.branch?.code || ''})
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setGatePassModalVisible(false)}>
+                <Ionicons name="close" size={24} color="#ffffff" />
+              </TouchableOpacity>
+            </View>
+
+            {gatePassLoading ? (
+              <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+                <ActivityIndicator size="large" color="#0d9488" />
+                <Text style={{ color: '#8e8e93', marginTop: 10 }}>Loading Gate Pass...</Text>
+              </View>
+            ) : gatePassData ? (
+              <ScrollView style={{ maxHeight: 420 }} showsVerticalScrollIndicator={false}>
+                {/* Printable Gate Card */}
+                <View style={{
+                  backgroundColor: '#ffffff',
+                  borderRadius: 16,
+                  padding: 20,
+                  alignItems: 'center',
+                  marginVertical: 10,
+                  borderWidth: 1,
+                  borderColor: '#e2e8f0',
+                }}>
+                  <Text style={{ color: '#0284c7', fontSize: 11, fontWeight: '800', letterSpacing: 1 }}>
+                    SAMEER LIBRARY • GATE PASS
+                  </Text>
+                  <Text style={{ color: '#0f172a', fontSize: 18, fontWeight: '800', marginTop: 2 }}>
+                    {gatePassData.branch?.name}
+                  </Text>
+                  <Text style={{ color: '#64748b', fontSize: 11 }}>
+                    {gatePassData.branch?.address || 'Reception / Main Gate'}
+                  </Text>
+
+                  {/* QR Code */}
+                  {gatePassData.qrCodeUrl ? (
+                    <Image
+                      source={{ uri: gatePassData.qrCodeUrl }}
+                      style={{ width: 220, height: 220, marginVertical: 14 }}
+                      resizeMode="contain"
+                    />
+                  ) : null}
+
+                  <Text style={{ color: '#0284c7', fontSize: 12, fontWeight: '700' }}>
+                    GATE CODE: {gatePassData.branch?.code}
+                  </Text>
+                  <Text style={{ color: '#94a3b8', fontSize: 10, marginTop: 4, textAlign: 'center' }}>
+                    🔒 Geofence Verified: Only scans inside {gatePassData.branch?.geofenceRadiusMeters || 75}m radius
+                  </Text>
+                </View>
+
+                {/* Regenerate Token Button */}
+                <TouchableOpacity
+                  style={{
+                    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+                    borderColor: '#ef4444',
+                    borderWidth: 1,
+                    borderRadius: 12,
+                    paddingVertical: 12,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                    marginTop: 8,
+                  }}
+                  onPress={() => handleRegenerateGatePass(gatePassData.branch?.id)}
+                  disabled={regeneratingGatePass}
+                >
+                  <Ionicons name="refresh" size={18} color="#ef4444" />
+                  <Text style={{ color: '#ef4444', fontWeight: '700', fontSize: 13 }}>
+                    {regeneratingGatePass ? 'Regenerating...' : '🔄 Regenerate QR (Expire Old)'}
+                  </Text>
+                </TouchableOpacity>
+              </ScrollView>
+            ) : null}
+          </View>
+        </View>
+      </Modal>
+
+      {/* MODAL: Digital Student ID Pass (Barcode + QR) */}
+      <Modal
+        visible={studentPassModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setStudentPassModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Pressable style={styles.modalBackdrop} onPress={() => setStudentPassModalVisible(false)} />
+          <View style={[styles.modalContent, { maxHeight: '90%', paddingBottom: 16 }]}>
+            <View style={styles.modalHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.modalTitle}>🪪 Student Library ID Pass</Text>
+                <Text style={styles.modalSubTitle}>Digital pass with barcode & QR code</Text>
+              </View>
+              <TouchableOpacity onPress={() => setStudentPassModalVisible(false)}>
+                <Ionicons name="close" size={24} color="#ffffff" />
+              </TouchableOpacity>
+            </View>
+
+            {studentPassLoading ? (
+              <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+                <ActivityIndicator size="large" color="#0d9488" />
+                <Text style={{ color: '#8e8e93', marginTop: 10 }}>Loading ID Pass...</Text>
+              </View>
+            ) : studentPassData ? (
+              <ScrollView style={{ maxHeight: 420 }} showsVerticalScrollIndicator={false}>
+                {/* Pass Card */}
+                <View style={{
+                  backgroundColor: '#ffffff',
+                  borderRadius: 16,
+                  padding: 16,
+                  alignItems: 'center',
+                  marginVertical: 8,
+                  borderWidth: 1,
+                  borderColor: '#e2e8f0',
+                }}>
+                  <Text style={{ color: '#0d9488', fontSize: 11, fontWeight: '800' }}>SAMEER LIBRARY PASS</Text>
+                  <Text style={{ color: '#0f172a', fontSize: 17, fontWeight: '800' }}>
+                    {studentPassData.student?.name}
+                  </Text>
+                  <Text style={{ color: '#64748b', fontSize: 12 }}>
+                    Seat {studentPassData.seatNumber} • {studentPassData.branchName}
+                  </Text>
+
+                  {/* QR Code */}
+                  {studentPassData.qrCodeUrl ? (
+                    <Image
+                      source={{ uri: studentPassData.qrCodeUrl }}
+                      style={{ width: 150, height: 150, marginVertical: 10 }}
+                      resizeMode="contain"
+                    />
+                  ) : null}
+
+                  {/* Barcode */}
+                  <View style={{
+                    backgroundColor: '#f1f5f9',
+                    padding: 8,
+                    borderRadius: 8,
+                    width: '100%',
+                    alignItems: 'center',
+                    marginTop: 4,
+                  }}>
+                    <Text style={{ fontSize: 9, color: '#64748b', fontWeight: '700' }}>BARCODE TOKEN</Text>
+                    <Text style={{ fontSize: 13, fontWeight: '800', letterSpacing: 2, color: '#0f172a' }}>
+                      {studentPassData.barcodeData || `SL-${studentPassData.student?.id?.slice(-6)}`}
+                    </Text>
+                  </View>
+
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%', marginTop: 10, borderTopWidth: 1, borderTopColor: '#e2e8f0', paddingTop: 8 }}>
+                    <Text style={{ fontSize: 11, color: '#64748b' }}>Plan: {studentPassData.planType}</Text>
+                    <Text style={{ fontSize: 11, color: '#64748b' }}>
+                      Valid: {studentPassData.validUntil ? new Date(studentPassData.validUntil).toLocaleDateString('en-IN') : 'Active'}
+                    </Text>
+                  </View>
+                </View>
+              </ScrollView>
+            ) : null}
+          </View>
+        </View>
+      </Modal>
+
+      {/* MODAL: Collect Cash / Partial Fee */}
+      <Modal
+        visible={collectPaymentModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setCollectPaymentModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Pressable style={styles.modalBackdrop} onPress={() => setCollectPaymentModalVisible(false)} />
+          <View style={[styles.modalContent, { maxHeight: '80%', paddingBottom: 16 }]}>
+            <View style={styles.modalHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.modalTitle}>💵 Collect Due Payment</Text>
+                <Text style={styles.modalSubTitle}>
+                  {selectedDueStudent?.studentName} • Due: ₹{selectedDueStudent?.dueAmount}
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setCollectPaymentModalVisible(false)}>
+                <Ionicons name="close" size={24} color="#ffffff" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ maxHeight: 350 }} showsVerticalScrollIndicator={false}>
+              <Text style={styles.modalInputLabel}>AMOUNT TO COLLECT (₹)</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="Amount (e.g. 500, 1000)"
+                placeholderTextColor="#8e8e93"
+                keyboardType="numeric"
+                value={collectAmount}
+                onChangeText={setCollectAmount}
+              />
+
+              <Text style={styles.modalInputLabel}>PAYMENT METHOD</Text>
+              <View style={{ flexDirection: 'row', gap: 10, marginBottom: 14 }}>
+                <TouchableOpacity
+                  style={{
+                    flex: 1,
+                    backgroundColor: collectMode === 'OFFLINE_CASH' ? 'rgba(34, 197, 94, 0.2)' : '#1c1c1e',
+                    borderWidth: 1,
+                    borderColor: collectMode === 'OFFLINE_CASH' ? '#22c55e' : '#334155',
+                    padding: 12,
+                    borderRadius: 10,
+                    alignItems: 'center',
+                  }}
+                  onPress={() => setCollectMode('OFFLINE_CASH')}
+                >
+                  <Text style={{ color: collectMode === 'OFFLINE_CASH' ? '#22c55e' : '#ffffff', fontWeight: '700', fontSize: 13 }}>
+                    💵 Cash (Counter)
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={{
+                    flex: 1,
+                    backgroundColor: collectMode === 'ADMIN_GPAY' ? 'rgba(2, 132, 199, 0.2)' : '#1c1c1e',
+                    borderWidth: 1,
+                    borderColor: collectMode === 'ADMIN_GPAY' ? '#0284c7' : '#334155',
+                    padding: 12,
+                    borderRadius: 10,
+                    alignItems: 'center',
+                  }}
+                  onPress={() => setCollectMode('ADMIN_GPAY')}
+                >
+                  <Text style={{ color: collectMode === 'ADMIN_GPAY' ? '#0284c7' : '#ffffff', fontWeight: '700', fontSize: 13 }}>
+                    📲 Admin GPay / UPI
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.modalInputLabel}>REMARKS / NOTES (OPTIONAL)</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="e.g. Half payment received by cash"
+                placeholderTextColor="#8e8e93"
+                value={collectRemarks}
+                onChangeText={setCollectRemarks}
+              />
+            </ScrollView>
+
+            <TouchableOpacity
+              style={[styles.modalSubmitBtn, { backgroundColor: '#0d9488' }]}
+              onPress={handleCollectPaymentSubmit}
+              disabled={submittingCollection}
+            >
+              <Text style={styles.modalSubmitBtnText}>
+                {submittingCollection ? 'Recording...' : `Record ₹${collectAmount || '0'} Payment`}
               </Text>
             </TouchableOpacity>
           </View>
@@ -4458,6 +5186,30 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '800',
     color: '#ffffff',
+  },
+  dueStatCard: {
+    width: 140,
+    borderRadius: 12,
+    padding: 12,
+    marginRight: 10,
+    justifyContent: 'center',
+  },
+  dueStatLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: 'rgba(255, 255, 255, 0.8)',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  dueStatValue: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#ffffff',
+  },
+  dueStatSub: {
+    fontSize: 10,
+    color: 'rgba(255, 255, 255, 0.75)',
+    marginTop: 4,
   },
 });
 
