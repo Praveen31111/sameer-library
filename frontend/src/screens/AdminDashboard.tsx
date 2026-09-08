@@ -72,6 +72,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
   const [duesStats, setDuesStats] = useState<any>(null);
   const [duesStudents, setDuesStudents] = useState<any[]>([]);
   const [duesFilter, setDuesFilter] = useState<'ALL' | 'DUE' | 'OVERDUE' | 'PAID'>('ALL');
+  const [duesSearchQuery, setDuesSearchQuery] = useState('');
   const [duesLoading, setDuesLoading] = useState(false);
   const [collectPaymentModalVisible, setCollectPaymentModalVisible] = useState(false);
   const [selectedDueStudent, setSelectedDueStudent] = useState<any>(null);
@@ -219,6 +220,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
           return true;
         }
       }
+      if (activeTab === 'Dues' && duesSearchQuery) {
+        setDuesSearchQuery('');
+        return true;
+      }
       if (activeTab !== 'Overview') {
         setActiveTab('Overview');
         return true;
@@ -237,6 +242,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
     roomModalVisible,
     branchModalVisible,
     activeTab,
+    duesSearchQuery,
     facilityLevel,
   ]);
 
@@ -1147,6 +1153,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
       (s.phone && s.phone.includes(searchQuery))
   );
 
+  const filteredDuesStudents = duesStudents.filter((item) => {
+    if (!duesSearchQuery.trim()) return true;
+    const q = duesSearchQuery.toLowerCase().trim();
+    return (
+      (item.studentName && item.studentName.toLowerCase().includes(q)) ||
+      (item.studentPhone && item.studentPhone.includes(q)) ||
+      (item.studentEmail && item.studentEmail.toLowerCase().includes(q)) ||
+      (item.seatNumber && item.seatNumber.toLowerCase().includes(q)) ||
+      (item.branchName && item.branchName.toLowerCase().includes(q))
+    );
+  });
+
   const renderTabContent = () => {
     if (loading && !refreshing) {
       return (
@@ -1692,6 +1710,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
               </View>
             </ScrollView>
 
+            {/* Dues Search Bar */}
+            <View style={[styles.searchBarContainer, { marginTop: 6, marginBottom: 8 }]}>
+              <Ionicons name="search-outline" size={18} color="#8e8e93" />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search student by name, phone, seat..."
+                placeholderTextColor="#8e8e93"
+                value={duesSearchQuery}
+                onChangeText={setDuesSearchQuery}
+                autoCorrect={false}
+              />
+              {duesSearchQuery ? (
+                <TouchableOpacity onPress={() => setDuesSearchQuery('')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <Ionicons name="close-circle" size={18} color="#8e8e93" />
+                </TouchableOpacity>
+              ) : null}
+            </View>
+
             {/* Filter Pills */}
             <View style={styles.filterContainer}>
               {(['ALL', 'DUE', 'OVERDUE', 'PAID'] as const).map((filter) => (
@@ -1718,7 +1754,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
               </View>
             ) : (
               <FlatList
-                data={duesStudents}
+                data={filteredDuesStudents}
                 keyExtractor={(item) => item.id}
                 contentContainerStyle={styles.flatListContent}
                 refreshControl={
@@ -1843,14 +1879,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                   </View>
                 )}
                 ListEmptyComponent={
-                  <View style={{ alignItems: 'center', paddingVertical: 40 }}>
-                    <Ionicons name="checkmark-circle-outline" size={48} color="#22c55e" />
-                    <Text style={{ color: '#ffffff', fontWeight: '700', marginTop: 10, fontSize: 15 }}>
-                      No Students Found
+                  <View style={{ alignItems: 'center', paddingVertical: 40, paddingHorizontal: 20 }}>
+                    <Ionicons 
+                      name={duesSearchQuery ? "search-outline" : "checkmark-circle-outline"} 
+                      size={48} 
+                      color={duesSearchQuery ? "#64748b" : "#22c55e"} 
+                    />
+                    <Text style={{ color: '#ffffff', fontWeight: '700', marginTop: 10, fontSize: 15, textAlign: 'center' }}>
+                      {duesSearchQuery ? `No student matches "${duesSearchQuery}"` : "No Students Found"}
                     </Text>
-                    <Text style={{ color: '#8e8e93', fontSize: 12, marginTop: 4 }}>
-                      All student dues for this filter are cleared.
+                    <Text style={{ color: '#8e8e93', fontSize: 12, marginTop: 4, textAlign: 'center' }}>
+                      {duesSearchQuery 
+                        ? "Check spelling or search by student phone or seat number." 
+                        : "All student dues for this filter are cleared."}
                     </Text>
+                    {duesSearchQuery ? (
+                      <TouchableOpacity 
+                        onPress={() => setDuesSearchQuery('')}
+                        style={{ marginTop: 14, paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#1e293b', borderRadius: 8 }}
+                      >
+                        <Text style={{ color: '#38bdf8', fontWeight: '700', fontSize: 13 }}>Clear Search</Text>
+                      </TouchableOpacity>
+                    ) : null}
                   </View>
                 }
               />

@@ -138,6 +138,17 @@ export async function GET(request: Request) {
             filteredStudents = studentsWithDues.filter(s => s.dueAmount === 0);
         }
 
+        const search = url.searchParams.get("search")?.toLowerCase().trim();
+        if (search) {
+            filteredStudents = filteredStudents.filter(s =>
+                s.studentName.toLowerCase().includes(search) ||
+                (s.studentPhone && s.studentPhone.includes(search)) ||
+                s.studentEmail.toLowerCase().includes(search) ||
+                s.seatNumber.toLowerCase().includes(search) ||
+                s.branchName.toLowerCase().includes(search)
+            );
+        }
+
         return NextResponse.json({
             stats: {
                 totalRevenueCollected,
