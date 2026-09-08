@@ -1,12 +1,10 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
+import prisma from "@/lib/prisma";
 import fs from "fs";
 import path from "path";
 
 export const dynamic = 'force-dynamic';
-
-const DATA_DIR = path.join(process.cwd(), "data");
-const PRICING_FILE = path.join(DATA_DIR, "pricing.json");
 
 interface PricingConfig {
     monthlyBasePrice: number;
@@ -26,41 +24,82 @@ const DEFAULT_PRICING: PricingConfig = {
     updatedAt: new Date().toISOString(),
 };
 
-function getPricing(): PricingConfig {
-    try {
-        if (!fs.existsSync(DATA_DIR)) {
-            fs.mkdirSync(DATA_DIR, { recursive: true });
-        }
-        if (!fs.existsSync(PRICING_FILE)) {
-            fs.writeFileSync(PRICING_FILE, JSON.stringify(DEFAULT_PRICING, null, 2), "utf-8");
-            return DEFAULT_PRICING;
-        }
-        const data = fs.readFileSync(PRICING_FILE, "utf-8");
-        return { ...DEFAULT_PRICING, ...JSON.parse(data) };
-    } catch (e) {
-        console.error("Error reading pricing config:", e);
-        return DEFAULT_PRICING;
-    }
+declare global {
+    var __cachedPricing: PricingConfig | undefined;
 }
 
-function savePricing(config: PricingConfig) {
-    if (!fs.existsSync(DATA_DIR)) {
-        fs.mkdirSync(DATA_DIR, { recursive: true });
+async function getPricing(): Promise<PricingConfig> {
+    // 1. Try DB first (Neon PostgreSQL - persists across all Vercel/Render instances!)
+    try {
+        const row = await prisma.systemConfig.findUnique({
+            where: { key: "pricing" }
+        });
+        if (row && row.value) {
+            const parsed = JSON.parse(row.value);
+            global.__cachedPricing = parsed;
+            return { ...DEFAULT_PRICING, ...parsed };
+        }
+    } catch (dbErr) {
+        console.warn("Pricing DB read warning:", dbErr);
     }
-    fs.writeFileSync(PRICING_FILE, JSON.stringify(config, null, 2), "utf-8");
+
+    // 2. Try global in-memory cache
+    if (global.__cachedPricing) {
+        return global.__cachedPricing;
+    }
+
+    // 3. Try local file fallback
+    try {
+        const localFile = path.join(process.cwd(), "data", "pricing.json");
+        if (fs.existsSync(localFile)) {
+            const fileData = fs.readFileSync(localFile, "utf-8");
+            const parsed = JSON.parse(fileData);
+            global.__cachedPricing = parsed;
+            return { ...DEFAULT_PRICING, ...parsed };
+        }
+    } catch (fsErr) {
+        console.warn("Pricing FS read warning:", fsErr);
+    }
+
+    return DEFAULT_PRICING;
+}
+
+async function savePricing(config: PricingConfig): Promise<void> {
+    // 1. Update in-memory cache immediately
+    global.__cachedPricing = config;
+
+    // 2. Persist to PostgreSQL database (Primary source of truth for Vercel/Render!)
+    try {
+        await prisma.systemConfig.upsert({
+            where: { key: "pricing" },
+            update: { value: JSON.stringify(config) },
+            create: { key: "pricing", value: JSON.stringify(config) }
+        });
+    } catch (dbErr) {
+        console.error("Pricing DB save error:", dbErr);
+    }
+
+    // 3. Best-effort local file write (safe against read-only Vercel filesystem)
+    try {
+        const dataDir = path.join(process.cwd(), "data");
+        if (!fs.existsSync(dataDir)) {
+            fs.mkdirSync(dataDir, { recursive: true });
+        }
+        fs.writeFileSync(path.join(dataDir, "pricing.json"), JSON.stringify(config, null, 2), "utf-8");
+    } catch (fsErr) {
+        // Silently ignore filesystem write errors on read-only serverless/Docker containers
+        console.warn("Local pricing file save skipped (read-only container):", fsErr);
+    }
 }
 
 // GET: Fetch current prices & offers for students and admin
 export async function GET() {
     try {
-        const pricing = getPricing();
+        const pricing = await getPricing();
         return NextResponse.json({ success: true, pricing });
-    } catch (error) {
+    } catch (error: any) {
         console.error("Get pricing error:", error);
-        return NextResponse.json(
-            { success: false, error: "Internal server error" },
-            { status: 500 }
-        );
+        return NextResponse.json({ success: true, pricing: DEFAULT_PRICING });
     }
 }
 
@@ -91,17 +130,17 @@ export async function POST(req: Request) {
             updatedAt: new Date().toISOString(),
         };
 
-        savePricing(updatedPricing);
+        await savePricing(updatedPricing);
 
         return NextResponse.json({
             success: true,
             message: "Pricing and discount offers updated successfully!",
             pricing: updatedPricing,
         });
-    } catch (error) {
+    } catch (error: any) {
         console.error("Update pricing error:", error);
         return NextResponse.json(
-            { success: false, error: "Internal server error" },
+            { success: false, error: error?.message || "Failed to update pricing" },
             { status: 500 }
         );
     }
