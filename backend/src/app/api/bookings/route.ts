@@ -36,7 +36,7 @@ export async function GET(request: Request) {
                 branch: { select: { name: true } },
                 room: { select: { name: true } },
                 seat: { select: { seatNumber: true } },
-                payment: { select: { status: true } },
+                payments: { select: { status: true, amount: true, createdAt: true } },
             },
             orderBy: { createdAt: "desc" },
         });
@@ -51,8 +51,11 @@ export async function GET(request: Request) {
                 endDate: b.endDate,
                 planType: b.planType,
                 amount: b.amount,
+                totalFee: b.totalFee || b.amount,
+                paidAmount: b.paidAmount || 0,
+                dueAmount: b.dueAmount !== undefined ? b.dueAmount : b.amount,
                 status: b.status.toLowerCase(),
-                paymentStatus: b.payment?.status.toLowerCase() ?? null,
+                paymentStatus: b.paymentStatus || (b.payments?.[0]?.status.toLowerCase() ?? "pending"),
             })),
         });
     } catch (error) {
@@ -107,6 +110,11 @@ export async function POST(request: Request) {
                 endDate: new Date(data.endDate),
                 planType: data.planType,
                 amount: data.amount,
+                totalFee: data.amount,
+                paidAmount: 0,
+                dueAmount: data.amount,
+                paymentStatus: "PENDING",
+                autoRenew: true,
                 status: "PENDING",
             },
             include: {

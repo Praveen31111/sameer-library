@@ -35,6 +35,9 @@ export async function GET() {
                 isActive: b.isActive,
                 roomCount: b._count.rooms,
                 totalSeats: b.rooms.reduce((sum, r) => sum + r._count.seats, 0),
+                latitude: b.latitude,
+                longitude: b.longitude,
+                geofenceRadiusMeters: b.geofenceRadiusMeters || 75,
                 createdAt: b.createdAt
             }))
         });

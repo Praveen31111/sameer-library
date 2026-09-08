@@ -37,26 +37,38 @@ model User {
   attendances      Attendance[]
   fingerprints     FingerprintTemplate[]
   approvedBookings Booking[]             @relation("ApprovedBy")
+  libraryPass      LibraryPass?
 }
 
 model Branch {
-  id        String   @id @default(cuid())
-  name      String
-  code      String   @unique // SL01, SL02
-  address   String
-  city      String
-  photo     String?  @db.Text // Branch photo as base64
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                   String   @id @default(cuid())
+  name                 String
+  code                 String   @unique // SL01, SL02
+  address              String
+  city                 String
+  photo                String?  @db.Text // Branch photo as base64
+  isActive             Boolean  @default(true)
+  
+  // Geofencing coordinates (Center location of library)
+  latitude             Float?
+  longitude            Float?
+  geofenceRadiusMeters Int      @default(75) // Radius in meters allowed for attendance
+
+  // Universal Gate Attendance QR Pass
+  gatePassToken        String?   @unique
+  gatePassUpdatedAt    DateTime?
+
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
   // Relations
-  ownerId     String
-  owner       User         @relation("BranchOwner", fields: [ownerId], references: [id])
-  rooms       Room[]
-  bookings    Booking[]
-  attendances Attendance[]
-  devices     Device[]
+  ownerId       String
+  owner         User          @relation("BranchOwner", fields: [ownerId], references: [id])
+  rooms         Room[]
+  bookings      Booking[]
+  attendances   Attendance[]
+  devices       Device[]
+  libraryPasses LibraryPass[]
 }
 
 model Room {
@@ -92,54 +104,100 @@ model Seat {
 }
 
 model Booking {
-  id        String   @id @default(cuid())
-  startDate DateTime
-  endDate   DateTime
-  planType  String // HOURLY, HALF_DAY, DAILY, WEEKLY, MONTHLY
-  status    String   @default("PENDING") // PENDING, APPROVED, REJECTED, CANCELLED, COMPLETED
-  amount    Float
-  notes     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                 String    @id @default(cuid())
+  startDate          DateTime
+  endDate            DateTime
+  planType           String // HOURLY, HALF_DAY, DAILY, WEEKLY, MONTHLY
+  status             String    @default("PENDING") // PENDING, APPROVED, REJECTED, CANCELLED, COMPLETED
+  amount             Float     // Backward compatibility: represents cycle fee
+  
+  // Billing & Due Tracking
+  totalFee           Float     @default(0) // Total fee for this cycle
+  paidAmount         Float     @default(0) // Total amount paid so far
+  dueAmount          Float     @default(0) // Outstanding due amount
+  paymentStatus      String    @default("PENDING") // PAID, DUE, PARTIAL, OVERDUE
+  autoRenew          Boolean   @default(true) // Monthly seat subscription renewal flag
+  billingCycleMonth  Int       @default(1) // Cycle counter (Month 1, Month 2...)
+  lastBilledAt       DateTime  @default(now())
+  nextDueDate        DateTime?
+  gracePeriodEndsAt  DateTime?
+  
+  // 0-Cost WhatsApp Reminder Tracking
+  lastReminderSentAt DateTime?
+  reminderCount      Int       @default(0)
+
+  notes              String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   // Relations
   studentId    String
-  student      User     @relation(fields: [studentId], references: [id])
+  student      User         @relation(fields: [studentId], references: [id])
   branchId     String
-  branch       Branch   @relation(fields: [branchId], references: [id])
+  branch       Branch       @relation(fields: [branchId], references: [id])
   roomId       String
-  room         Room     @relation(fields: [roomId], references: [id])
+  room         Room         @relation(fields: [roomId], references: [id])
   seatId       String
-  seat         Seat     @relation(fields: [seatId], references: [id])
+  seat         Seat         @relation(fields: [seatId], references: [id])
   approvedById String?
-  approvedBy   User?    @relation("ApprovedBy", fields: [approvedById], references: [id])
-  payment      Payment?
+  approvedBy   User?        @relation("ApprovedBy", fields: [approvedById], references: [id])
+  payments     Payment[]
+  libraryPass  LibraryPass?
 }
 
 model Payment {
   id                String   @id @default(cuid())
   amount            Float
   currency          String   @default("INR")
-  status            String   @default("PENDING") // PENDING, SUCCESS, FAILED, REFUNDED
-  provider          String   @default("razorpay")
+  status            String   @default("SUCCESS") // PENDING, SUCCESS, FAILED, REFUNDED
+  paymentMode       String   @default("OFFLINE_CASH") // OFFLINE_CASH, ONLINE_UPI, ADMIN_ADJUSTMENT
+  provider          String   @default("cash") // cash, razorpay, upi_counter
   providerPaymentId String?
   providerOrderId   String?
+  remarks           String?
+  collectedById     String?
+  receiptNumber     String?  @unique
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
   // Relations
-  bookingId String  @unique
+  bookingId String
   booking   Booking @relation(fields: [bookingId], references: [id])
   studentId String
   student   User    @relation(fields: [studentId], references: [id])
 }
 
+model LibraryPass {
+  id          String   @id @default(cuid())
+  passNumber  String   @unique // e.g. SL-PASS-8842
+  qrToken     String   @unique // Secure verification token
+  barcodeData String   @unique // Barcode representation
+  status      String   @default("ACTIVE") // ACTIVE, SUSPENDED, EXPIRED
+  issuedAt    DateTime @default(now())
+  validUntil  DateTime
+
+  // Relations
+  studentId String   @unique
+  student   User     @relation(fields: [studentId], references: [id])
+  bookingId String   @unique
+  booking   Booking  @relation(fields: [bookingId], references: [id])
+  branchId  String
+  branch    Branch   @relation(fields: [branchId], references: [id])
+}
+
 model Attendance {
-  id         String    @id @default(cuid())
-  checkInAt  DateTime
-  checkOutAt DateTime?
-  source     String // FINGERPRINT_DEVICE, MANUAL_ADMIN, QR_CODE
-  createdAt  DateTime  @default(now())
+  id                 String    @id @default(cuid())
+  checkInAt          DateTime
+  checkOutAt         DateTime?
+  source             String // FINGERPRINT_DEVICE, MANUAL_ADMIN, QR_CODE
+  
+  // Geofenced location logs
+  latitude           Float?
+  longitude          Float?
+  distanceMeters     Float?
+  isVerifiedLocation Boolean   @default(true)
+
+  createdAt          DateTime  @default(now())
 
   // Relations
   studentId String
@@ -179,3 +237,4 @@ model FingerprintTemplate {
 
   @@unique([studentId, deviceId])
 }
+

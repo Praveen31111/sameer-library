@@ -48,6 +48,9 @@ interface Branch {
     isActive: boolean;
     roomCount: number;
     totalSeats: number;
+    latitude?: number | null;
+    longitude?: number | null;
+    geofenceRadiusMeters?: number;
 }
 
 export default function BranchesPage() {
@@ -55,6 +58,15 @@ export default function BranchesPage() {
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
     const [editingBranch, setEditingBranch] = useState<Branch | null>(null);
+
+    // Geofence Modal State
+    const [geofenceBranch, setGeofenceBranch] = useState<Branch | null>(null);
+    const [geoLat, setGeoLat] = useState<string>("");
+    const [geoLng, setGeoLng] = useState<string>("");
+    const [geoRadius, setGeoRadius] = useState<number>(75);
+    const [savingGeo, setSavingGeo] = useState(false);
+    const [fetchingLocation, setFetchingLocation] = useState(false);
+
     const [formData, setFormData] = useState({
         name: "",
         code: "",
@@ -195,6 +207,57 @@ export default function BranchesPage() {
         }
     };
 
+    const handleCaptureGPS = () => {
+        if (!navigator.geolocation) {
+            alert("Geolocation is not supported by your browser");
+            return;
+        }
+        setFetchingLocation(true);
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                setGeoLat(pos.coords.latitude.toString());
+                setGeoLng(pos.coords.longitude.toString());
+                setFetchingLocation(false);
+            },
+            (err) => {
+                alert(`Location error: ${err.message}. Please allow location permission in your browser.`);
+                setFetchingLocation(false);
+            },
+            { enableHighAccuracy: true }
+        );
+    };
+
+    const handleSaveGeofence = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!geofenceBranch) return;
+
+        setSavingGeo(true);
+        try {
+            const res = await fetch("/api/admin/branches/location", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    branchId: geofenceBranch.id,
+                    latitude: geoLat,
+                    longitude: geoLng,
+                    geofenceRadiusMeters: geoRadius,
+                }),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                alert(`Geofence location saved for ${geofenceBranch.name}!`);
+                setGeofenceBranch(null);
+                fetchBranches();
+            } else {
+                alert(data.error || "Failed to save geofence");
+            }
+        } catch (err) {
+            alert("Error saving geofence");
+        } finally {
+            setSavingGeo(false);
+        }
+    };
+
     if (loading) return <div className="p-8 text-center">Loading branches...</div>;
 
     return (
@@ -282,8 +345,47 @@ export default function BranchesPage() {
                                     </div>
                                 </div>
 
+                                {/* Geofence Status */}
+                                <div style={{
+                                    backgroundColor: "rgba(255,255,255,0.03)",
+                                    padding: "0.5rem 0.75rem",
+                                    borderRadius: "6px",
+                                    marginBottom: "0.75rem",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "space-between",
+                                    fontSize: "0.75rem"
+                                }}>
+                                    <span style={{ color: branch.latitude ? "var(--success)" : "var(--warning)", fontWeight: 500 }}>
+                                        {branch.latitude
+                                            ? `📍 GPS: ${branch.latitude.toFixed(3)}, ${branch.longitude?.toFixed(3)} (${branch.geofenceRadiusMeters || 75}m)`
+                                            : "⚠️ No Geofence Set"}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        className="btn btn-sm btn-secondary"
+                                        style={{ fontSize: "0.6875rem", padding: "0.2rem 0.5rem" }}
+                                        onClick={() => {
+                                            setGeofenceBranch(branch);
+                                            setGeoLat(branch.latitude ? branch.latitude.toString() : "");
+                                            setGeoLng(branch.longitude ? branch.longitude.toString() : "");
+                                            setGeoRadius(branch.geofenceRadiusMeters || 75);
+                                        }}
+                                    >
+                                        📍 Set GPS
+                                    </button>
+                                </div>
+
                                 {/* Actions */}
-                                <div style={{ display: "flex", gap: "0.5rem" }}>
+                                <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                                    <a
+                                        href={`/admin/branches/${branch.id}/gate-pass`}
+                                        className="btn btn-sm btn-primary"
+                                        style={{ fontSize: "0.75rem", padding: "0.25rem 0.6rem", textDecoration: "none" }}
+                                        title="Print Entrance Gate Attendance Poster"
+                                    >
+                                        🚪 Gate QR Pass
+                                    </a>
                                     <button
                                         className="btn btn-secondary btn-sm"
                                         style={{ flex: 1 }}
@@ -464,6 +566,119 @@ export default function BranchesPage() {
                                     disabled={saving}
                                 >
                                     {saving ? "Saving..." : editingBranch ? "Save Changes" : "Create Branch"}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* GEOFENCE GPS MODAL */}
+            {geofenceBranch && (
+                <div style={{
+                    position: "fixed",
+                    inset: 0,
+                    background: "rgba(0,0,0,0.7)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    zIndex: 100,
+                    padding: "1rem"
+                }}>
+                    <div className="card" style={{ maxWidth: "460px", width: "100%", padding: "1.5rem" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+                            <h2 style={{ fontSize: "1.25rem", margin: 0, fontWeight: 700 }}>
+                                📍 Geofence GPS Settings
+                            </h2>
+                            <button
+                                onClick={() => setGeofenceBranch(null)}
+                                style={{ background: "none", border: "none", color: "inherit", cursor: "pointer" }}
+                            >
+                                <XIcon />
+                            </button>
+                        </div>
+
+                        <p style={{ fontSize: "0.8125rem", color: "var(--text-muted)", marginBottom: "1rem" }}>
+                            Branch: <b>{geofenceBranch.name}</b>. Attendance QR scan sirf usi waqt allow hogi jab student is GPS location ke radius me hoga.
+                        </p>
+
+                        {/* 1-Click Capture Button */}
+                        <div style={{ marginBottom: "1.25rem" }}>
+                            <button
+                                type="button"
+                                className="btn btn-primary"
+                                onClick={handleCaptureGPS}
+                                disabled={fetchingLocation}
+                                style={{ width: "100%", justifyContent: "center" }}
+                            >
+                                {fetchingLocation ? "Detecting GPS..." : "📍 Capture My Current GPS (1-Click)"}
+                            </button>
+                            <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.25rem", textAlign: "center" }}>
+                                Library me khade hokar is button ko dabayein.
+                            </p>
+                        </div>
+
+                        <form onSubmit={handleSaveGeofence}>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem", marginBottom: "1rem" }}>
+                                <div>
+                                    <label className="label">Latitude*</label>
+                                    <input
+                                        type="number"
+                                        step="any"
+                                        className="input"
+                                        value={geoLat}
+                                        onChange={e => setGeoLat(e.target.value)}
+                                        placeholder="e.g. 25.5941"
+                                        required
+                                        style={{ width: "100%" }}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="label">Longitude*</label>
+                                    <input
+                                        type="number"
+                                        step="any"
+                                        className="input"
+                                        value={geoLng}
+                                        onChange={e => setGeoLng(e.target.value)}
+                                        placeholder="e.g. 85.1376"
+                                        required
+                                        style={{ width: "100%" }}
+                                    />
+                                </div>
+                            </div>
+
+                            <div style={{ marginBottom: "1.5rem" }}>
+                                <label className="label">Allowed Attendance Radius (Meters)</label>
+                                <select
+                                    className="input"
+                                    value={geoRadius}
+                                    onChange={e => setGeoRadius(Number(e.target.value))}
+                                    style={{ width: "100%" }}
+                                >
+                                    <option value={50}>50 Meters (Tight Boundary)</option>
+                                    <option value={75}>75 Meters (Recommended - Normal Building)</option>
+                                    <option value={100}>100 Meters (Large Campus)</option>
+                                    <option value={150}>150 Meters (Wide Radius)</option>
+                                </select>
+                            </div>
+
+                            <div style={{ display: "flex", gap: "0.75rem" }}>
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary"
+                                    style={{ flex: 1 }}
+                                    onClick={() => setGeofenceBranch(null)}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="btn btn-primary"
+                                    style={{ flex: 1 }}
+                                    disabled={savingGeo}
+                                >
+                                    {savingGeo ? "Saving..." : "Save Geofence GPS"}
                                 </button>
                             </div>
                         </form>

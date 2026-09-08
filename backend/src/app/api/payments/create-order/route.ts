@@ -1,10 +1,10 @@
-
 import { NextResponse } from "next/server";
 import Razorpay from "razorpay";
 import prisma from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 
 export const dynamic = 'force-dynamic';
+
 export async function POST(request: Request) {
     try {
         const user = await getCurrentUser();
@@ -21,7 +21,7 @@ export async function POST(request: Request) {
 
         const booking = await prisma.booking.findUnique({
             where: { id: bookingId },
-            include: { payment: true }
+            include: { payments: true }
         });
 
         if (!booking) {
@@ -32,8 +32,9 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
         }
 
-        if (booking.payment && booking.payment.status === "SUCCESS") {
-            return NextResponse.json({ error: "Booking already paid" }, { status: 400 });
+        const dueToPay = booking.dueAmount !== undefined ? booking.dueAmount : booking.amount;
+        if (dueToPay <= 0 || booking.paymentStatus === "PAID") {
+            return NextResponse.json({ error: "Booking is already fully paid" }, { status: 400 });
         }
 
         // Initialize Razorpay
@@ -53,7 +54,7 @@ export async function POST(request: Request) {
             });
 
             const options = {
-                amount: Math.round(booking.amount * 100), // amount in smallest currency unit
+                amount: Math.round(dueToPay * 100), // amount in paise
                 currency: "INR",
                 receipt: `rcpt_${bookingId.substring(0, 10)}`,
             };
@@ -63,41 +64,23 @@ export async function POST(request: Request) {
             keyId = process.env.RAZORPAY_KEY_ID;
         }
 
-        // Create or Update pending payment record? 
-        // We usually wait for success to create Payment, OR create a pending one now.
-        // Let's create a pending payment record or update if exists
-
-        // Check if pending payment exists
-        const existingPayment = await prisma.payment.findUnique({
-            where: { bookingId: bookingId }
+        // Create pending payment record
+        await prisma.payment.create({
+            data: {
+                amount: dueToPay,
+                status: "PENDING",
+                paymentMode: "ONLINE_UPI",
+                provider: "razorpay",
+                providerOrderId: orderId,
+                bookingId: bookingId,
+                studentId: user.id
+            }
         });
-
-        if (existingPayment) {
-            await prisma.payment.update({
-                where: { bookingId: bookingId },
-                data: {
-                    providerOrderId: orderId,
-                    amount: booking.amount,
-                    status: "PENDING"
-                }
-            });
-        } else {
-            await prisma.payment.create({
-                data: {
-                    amount: booking.amount,
-                    status: "PENDING",
-                    provider: "razorpay",
-                    providerOrderId: orderId,
-                    bookingId: bookingId,
-                    studentId: user.id
-                }
-            });
-        }
 
         return NextResponse.json({
             id: orderId,
             currency: "INR",
-            amount: booking.amount * 100,
+            amount: dueToPay * 100,
             keyId: keyId
         });
 

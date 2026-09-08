@@ -1,15 +1,16 @@
-
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import prisma from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 
 export const dynamic = 'force-dynamic';
+
 export async function POST(request: Request) {
     try {
         const user = await getCurrentUser();
-        // Payment verification can technically happen via webhook too, but client-side callback is common for simple flows.
-        // We verify the user is logged in at least.
+        if (!user) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
 
         const body = await request.json();
         const { bookingId, razorpayOrderId, razorpayPaymentId, razorpaySignature } = body;
@@ -35,19 +36,55 @@ export async function POST(request: Request) {
             }
         }
 
-        // Update payment status
-        await prisma.payment.update({
-            where: { bookingId: bookingId }, // Assumes we created a PENDING payment in create-order
-            data: {
-                status: "SUCCESS",
-                providerPaymentId: razorpayPaymentId
+        // Find the pending payment for this booking / order
+        const pendingPayment = await prisma.payment.findFirst({
+            where: {
+                bookingId: bookingId,
+                providerOrderId: razorpayOrderId,
+            }
+        }) || await prisma.payment.findFirst({
+            where: {
+                bookingId: bookingId,
+                status: "PENDING"
             }
         });
 
-        // Optionally update booking status if needed (e.g., if we had a PAID status)
-        // But we rely on Payment record being SUCCESS. 
+        const receiptNo = `SL-REC-${Date.now().toString().slice(-8)}`;
 
-        return NextResponse.json({ success: true });
+        if (pendingPayment) {
+            await prisma.payment.update({
+                where: { id: pendingPayment.id },
+                data: {
+                    status: "SUCCESS",
+                    providerPaymentId: razorpayPaymentId,
+                    receiptNumber: receiptNo,
+                    paymentMode: "ONLINE_GATEWAY",
+                    provider: "App Payment Gateway (Razorpay)",
+                }
+            });
+        }
+
+        // Update booking due balances and auto-approve if pending
+        const booking = await prisma.booking.findUnique({ where: { id: bookingId } });
+        if (booking) {
+            const paidAmt = pendingPayment?.amount || booking.amount;
+            const newPaid = (booking.paidAmount || 0) + paidAmt;
+            const newDue = Math.max(0, (booking.totalFee || booking.amount) - newPaid);
+            await prisma.booking.update({
+                where: { id: bookingId },
+                data: {
+                    status: "APPROVED", // Student paid online, automatically approve and lock seat!
+                    paidAmount: newPaid,
+                    dueAmount: newDue,
+                    paymentStatus: newDue === 0 ? "PAID" : "PARTIAL",
+                    autoRenew: true,
+                    billingCycleMonth: 1,
+                    nextDueDate: booking.endDate,
+                }
+            });
+        }
+
+        return NextResponse.json({ success: true, receiptNumber: receiptNo });
 
     } catch (error) {
         console.error("Verify payment error:", error);

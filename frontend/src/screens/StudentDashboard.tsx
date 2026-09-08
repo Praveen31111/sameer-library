@@ -6,6 +6,8 @@ import { useAuth } from '../context/AuthContext';
 import { apiRequest } from '../services/api';
 import { BottomNavBar, BottomNavTab } from '../components/BottomNavBar';
 import { COLORS } from '../utils/constants';
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as Location from 'expo-location';
 
 interface StudentDashboardProps {
   onNavigate: (screen: 'Home' | 'Login' | 'Register' | 'StudentDashboard' | 'AdminDashboard') => void;
@@ -47,6 +49,11 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [loadingSeats, setLoadingSeats] = useState(false);
   const [zoneFilter, setZoneFilter] = useState<'ALL' | 'SILENT' | 'GROUP' | 'MONITOR'>('ALL');
+  
+  // Gate Attendance QR Scanner State
+  const [showScanner, setShowScanner] = useState(false);
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const scanningLock = useRef(false);
 
   // Dynamic Pricing & Discount Offer State
   const [pricingConfig, setPricingConfig] = useState<any>({
@@ -286,6 +293,78 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
     }
   };
 
+  // Open Gate QR Scanner with Camera and Geofence GPS checks
+  const handleOpenGateScanner = async () => {
+    if (!cameraPermission?.granted) {
+      const permission = await requestCameraPermission();
+      if (!permission.granted) {
+        Alert.alert('Camera Permission Required', 'Please allow camera permission in device settings to scan the Library Gate QR Code.');
+        return;
+      }
+    }
+
+    try {
+      const { status: locStatus } = await Location.requestForegroundPermissionsAsync();
+      if (locStatus !== 'granted') {
+        Alert.alert('GPS Location Required', 'Please allow location permission so the system can verify you are physically at the library gate.');
+        return;
+      }
+    } catch (err) {
+      console.warn('Location permission check warning:', err);
+    }
+
+    setShowScanner(true);
+  };
+
+  // Handle scanned Gate QR Pass
+  const handleBarCodeScanned = async ({ data }: { data: string }) => {
+    if (scanningLock.current) return;
+    scanningLock.current = true;
+
+    try {
+      let latitude: number | null = null;
+      let longitude: number | null = null;
+
+      try {
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        if (loc?.coords) {
+          latitude = loc.coords.latitude;
+          longitude = loc.coords.longitude;
+        }
+      } catch (locErr) {
+        console.warn('Location fetch warning:', locErr);
+      }
+
+      const res = await apiRequest('/attendance/scan', {
+        method: 'POST',
+        body: JSON.stringify({
+          qrToken: data,
+          latitude,
+          longitude,
+        }),
+      });
+
+      setShowScanner(false);
+
+      if (res.success) {
+        Alert.alert(
+          res.action === 'CHECK_OUT' ? 'Punch OUT Successful! 👋' : 'Punch IN Successful! 🎉',
+          res.message || 'Attendance updated successfully!'
+        );
+        fetchOverviewData();
+      } else {
+        Alert.alert('Attendance Failed', res.error || 'Could not verify pass.');
+      }
+    } catch (err: any) {
+      setShowScanner(false);
+      Alert.alert('Attendance Failed', err.message || 'Location verification or QR token check failed.');
+    } finally {
+      setTimeout(() => {
+        scanningLock.current = false;
+      }, 2000);
+    }
+  };
+
   // Fetch Overview data (attendance stats + bookings list)
   const fetchOverviewData = async () => {
     setLoading(true);
@@ -502,6 +581,36 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
           <Text style={styles.greetingSubtitle}>Here is your study schedule for today.</Text>
         </View>
 
+        {/* Due Fee Alert Banner */}
+        {activeBooking && activeBooking.dueAmount > 0 && (
+          <View style={{
+            backgroundColor: 'rgba(239, 68, 68, 0.08)',
+            borderColor: '#ef4444',
+            borderWidth: 1.5,
+            borderRadius: 16,
+            padding: 16,
+            marginBottom: 16,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 12
+          }}>
+            <Ionicons name="alert-circle" size={28} color="#ef4444" />
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Text style={{ color: '#ef4444', fontWeight: '800', fontSize: 15 }}>
+                  Fee Due: ₹{activeBooking.dueAmount}
+                </Text>
+                <Text style={{ color: '#ef4444', fontSize: 11, fontWeight: '700', backgroundColor: 'rgba(239, 68, 68, 0.15)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
+                  PAYMENT PENDING
+                </Text>
+              </View>
+              <Text style={{ color: COLORS.textSecondary, fontSize: 12, marginTop: 4 }}>
+                Next Due Date: {activeBooking.nextDueDate ? new Date(activeBooking.nextDueDate).toLocaleDateString('en-IN') : 'Immediate'}. Please pay at reception desk.
+              </Text>
+            </View>
+          </View>
+        )}
+
         {/* Active Booking Bento Card */}
         <View style={styles.activeBookingCard}>
           <View style={styles.activeBookingHeader}>
@@ -558,8 +667,30 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
             </View>
           </View>
 
+          {/* Gate Attendance Scanner CTA */}
+          <TouchableOpacity 
+            style={{
+              backgroundColor: COLORS.primary,
+              borderRadius: 14,
+              paddingVertical: 14,
+              paddingHorizontal: 16,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              marginTop: 14,
+            }}
+            onPress={handleOpenGateScanner}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="qr-code-outline" size={20} color="#ffffff" />
+            <Text style={{ color: '#ffffff', fontWeight: '700', fontSize: 15 }}>
+              Scan Gate QR Pass (Punch IN / OUT)
+            </Text>
+          </TouchableOpacity>
+
           {/* Quick Buttons */}
-          <View style={styles.cardActionsRow}>
+          <View style={[styles.cardActionsRow, { marginTop: 10 }]}>
             <TouchableOpacity 
               style={styles.cardActionBtn} 
               onPress={() => setActiveTab('Book')}
@@ -1304,6 +1435,106 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
 
       {/* Bottom Navigation Bar */}
       <BottomNavBar activeTab={activeTab} onTabPress={setActiveTab} />
+
+      {/* Universal Gate Attendance QR Scanner Modal */}
+      <Modal
+        visible={showScanner}
+        animationType="slide"
+        onRequestClose={() => setShowScanner(false)}
+      >
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#000000' }}>
+          <View style={{
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            paddingHorizontal: 20,
+            paddingVertical: 14,
+            backgroundColor: '#0f172a',
+            zIndex: 10
+          }}>
+            <TouchableOpacity
+              onPress={() => setShowScanner(false)}
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: 19,
+                backgroundColor: 'rgba(255,255,255,0.15)',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              <Ionicons name="close" size={22} color="#ffffff" />
+            </TouchableOpacity>
+            <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: '700' }}>
+              Scan Gate Attendance Pass
+            </Text>
+            <View style={{ width: 38 }} />
+          </View>
+
+          <View style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+            <CameraView
+              style={StyleSheet.absoluteFillObject}
+              facing="back"
+              barcodeScannerSettings={{
+                barcodeTypes: ["qr"],
+              }}
+              onBarcodeScanned={handleBarCodeScanned}
+            />
+
+            {/* Target Reticle Overlay */}
+            <View style={{
+              ...StyleSheet.absoluteFillObject,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: 'rgba(0,0,0,0.45)'
+            }}>
+              <View style={{
+                width: 250,
+                height: 250,
+                borderWidth: 2,
+                borderColor: '#22c55e',
+                borderRadius: 16,
+                backgroundColor: 'transparent',
+                position: 'relative'
+              }}>
+                <Animated.View style={{
+                  height: 3,
+                  backgroundColor: '#22c55e',
+                  width: '100%',
+                  shadowColor: '#22c55e',
+                  shadowOpacity: 0.9,
+                  shadowRadius: 8,
+                  transform: [{
+                    translateY: laserAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0, 245]
+                    })
+                  }]
+                }} />
+              </View>
+
+              <Text style={{
+                color: '#ffffff',
+                fontSize: 14,
+                fontWeight: '700',
+                marginTop: 24,
+                textAlign: 'center',
+                paddingHorizontal: 30
+              }}>
+                Point camera at Gate QR Poster at entrance
+              </Text>
+              <Text style={{
+                color: 'rgba(255,255,255,0.7)',
+                fontSize: 12,
+                marginTop: 6,
+                textAlign: 'center'
+              }}>
+                📍 Live GPS location validates you are inside library premises
+              </Text>
+            </View>
+          </View>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 };

@@ -25,6 +25,17 @@ export async function GET(request: Request) {
                 branch: { select: { name: true } },
                 room: { select: { name: true } },
                 seat: { select: { seatNumber: true } },
+                payments: {
+                    orderBy: { createdAt: "desc" },
+                    take: 1,
+                    select: {
+                        paymentMode: true,
+                        provider: true,
+                        providerPaymentId: true,
+                        amount: true,
+                        receiptNumber: true,
+                    }
+                }
             },
             orderBy: { createdAt: "desc" },
         });
@@ -44,6 +55,17 @@ export async function GET(request: Request) {
                 endDate: b.endDate,
                 planType: b.planType,
                 amount: b.amount,
+                totalFee: b.totalFee || b.amount,
+                paidAmount: b.paidAmount || 0,
+                dueAmount: b.dueAmount !== undefined ? b.dueAmount : b.amount,
+                paymentStatus: b.paymentStatus || "PENDING",
+                paymentMode: b.payments?.[0]?.paymentMode || (b.paymentStatus === "PAID" ? "OFFLINE_CASH" : null),
+                paymentProvider: b.payments?.[0]?.provider || null,
+                paymentTxnId: b.payments?.[0]?.providerPaymentId || null,
+                receiptNumber: b.payments?.[0]?.receiptNumber || null,
+                billingCycleMonth: b.billingCycleMonth || 1,
+                nextDueDate: b.nextDueDate,
+                lastReminderSentAt: b.lastReminderSentAt,
                 status: b.status.toLowerCase(),
                 createdAt: b.createdAt,
             })),
@@ -57,7 +79,7 @@ export async function GET(request: Request) {
     }
 }
 
-// POST: Approve or reject a booking
+// POST: Approve or reject a booking (Supports: "PAID", "DUE" / "APPROVE_WITHOUT_PAYMENT", "PARTIAL")
 export async function POST(request: Request) {
     try {
         const user = await getCurrentUser();
@@ -65,7 +87,15 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { bookingId, action, paymentMode } = await request.json();
+        const {
+            bookingId,
+            action,
+            paymentAction = "PAID",
+            paymentMode = "OFFLINE_CASH", // "OFFLINE_CASH" | "ADMIN_GPAY" | "ONLINE_GATEWAY"
+            referenceId,
+            customAmount,
+            remarks
+        } = await request.json();
 
         if (!bookingId || !["approve", "reject"].includes(action)) {
             return NextResponse.json({ error: "Invalid request" }, { status: 400 });
@@ -87,34 +117,92 @@ export async function POST(request: Request) {
             );
         }
 
+        if (action === "reject") {
+            const rejected = await prisma.booking.update({
+                where: { id: bookingId },
+                data: {
+                    status: "REJECTED",
+                    approvedById: user.id,
+                },
+            });
+            return NextResponse.json({ success: true, booking: { id: rejected.id, status: "rejected" } });
+        }
+
+        // Action: APPROVE
+        // Determine Payment Calculation based on admin choice
+        const totalFee = booking.amount || 0;
+        let paidAmount = 0;
+        let dueAmount = totalFee;
+        let paymentStatus = "DUE";
+
+        if (paymentAction === "PAID") {
+            // Admin confirms full payment was received (Cash or Admin GPay)
+            paidAmount = totalFee;
+            dueAmount = 0;
+            paymentStatus = "PAID";
+        } else if (paymentAction === "PARTIAL" && customAmount && customAmount > 0) {
+            // Admin records a partial payment upon approval
+            paidAmount = Math.min(Number(customAmount), totalFee);
+            dueAmount = Math.max(0, totalFee - paidAmount);
+            paymentStatus = dueAmount === 0 ? "PAID" : "PARTIAL";
+        } else {
+            // Option: "DUE" / "APPROVE_WITHOUT_PAYMENT"
+            paidAmount = 0;
+            dueAmount = totalFee;
+            paymentStatus = "DUE";
+        }
+
         const updated = await prisma.booking.update({
             where: { id: bookingId },
             data: {
-                status: action === "approve" ? "APPROVED" : "REJECTED",
+                status: "APPROVED",
+                totalFee: totalFee,
+                paidAmount: paidAmount,
+                dueAmount: dueAmount,
+                paymentStatus: paymentStatus,
+                autoRenew: true,
+                billingCycleMonth: 1,
+                lastBilledAt: new Date(),
+                nextDueDate: booking.endDate,
                 approvedById: user.id,
             },
         });
 
-        // If approved, record the payment with chosen mode (Online vs Offline Cash)
-        if (action === "approve") {
-            const isOnline = paymentMode === "ONLINE";
-            const methodLabel = isOnline ? "Online (UPI / Netbanking)" : "Offline (Cash / Counter)";
-            const providerKey = isOnline ? "ONLINE_UPI" : "OFFLINE_CASH";
+        // If any payment was collected (Full or Partial), record payment entry
+        if (paidAmount > 0) {
+            let methodLabel = "Cash (Counter)";
+            let providerKey = "OFFLINE_CASH";
+            let finalMode = paymentMode;
 
-            await prisma.payment.upsert({
-                where: { bookingId: booking.id },
-                create: {
+            if (paymentMode === "ADMIN_GPAY" || paymentMode === "ONLINE_UPI") {
+                methodLabel = "Admin GPay / Direct UPI";
+                providerKey = "ADMIN_GPAY";
+                finalMode = "ADMIN_GPAY";
+            } else if (paymentMode === "ONLINE_GATEWAY") {
+                methodLabel = "Payment Gateway (In-App)";
+                providerKey = "ONLINE_GATEWAY";
+                finalMode = "ONLINE_GATEWAY";
+            } else {
+                methodLabel = "Cash (Counter)";
+                providerKey = "OFFLINE_CASH";
+                finalMode = "OFFLINE_CASH";
+            }
+
+            const receiptNo = `SL-REC-${Date.now().toString().slice(-8)}`;
+            const providerTxnId = referenceId && referenceId.trim().length > 0 ? referenceId.trim() : `${providerKey}_${Date.now()}`;
+
+            await prisma.payment.create({
+                data: {
                     bookingId: booking.id,
                     studentId: booking.studentId,
-                    amount: booking.amount,
+                    amount: paidAmount,
                     status: "SUCCESS",
+                    paymentMode: finalMode,
                     provider: methodLabel,
-                    providerPaymentId: `${providerKey}_${Date.now()}`,
-                },
-                update: {
-                    status: "SUCCESS",
-                    provider: methodLabel,
-                    amount: booking.amount,
+                    providerPaymentId: providerTxnId,
+                    receiptNumber: receiptNo,
+                    remarks: remarks || (finalMode === "ADMIN_GPAY" ? `Paid via Admin GPay/UPI (Ref: ${providerTxnId})` : "Fee paid upon admission approval"),
+                    collectedById: user.id,
                 },
             });
         }
@@ -124,7 +212,11 @@ export async function POST(request: Request) {
             booking: {
                 id: updated.id,
                 status: updated.status.toLowerCase(),
-                paymentMode: paymentMode || "OFFLINE",
+                paymentStatus: updated.paymentStatus,
+                totalFee: updated.totalFee,
+                paidAmount: updated.paidAmount,
+                dueAmount: updated.dueAmount,
+                approvedWithoutPayment: paymentAction === "DUE",
             },
         });
     } catch (error) {
