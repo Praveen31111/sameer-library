@@ -293,8 +293,35 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
     }
   };
 
-  // Open Gate QR Scanner with Camera and Geofence GPS checks
+  // Open Gate QR Scanner with Camera and Geofence GPS checks (Strict: Approved students only)
   const handleOpenGateScanner = async () => {
+    // 1. Strict Admission Check: Sirf APPROVED student hi attendence laga sakein!
+    const hasApprovedBooking = bookingsList.some((b: any) => {
+      const s = (b.status || '').toUpperCase();
+      return s === 'APPROVED' || s === 'CONFIRMED';
+    });
+
+    if (!hasApprovedBooking) {
+      const hasPendingBooking = bookingsList.some((b: any) => (b.status || '').toUpperCase() === 'PENDING');
+      if (hasPendingBooking) {
+        Alert.alert(
+          'Admission Approval Pending ⚠️',
+          'Aapka seat admission abhi Library Admin se APPROVE nahi hua hai.\n\nJaise hi Library Admin aapka admission approve karenge, gate scanner turant unlock ho jayega aur aap attendance laga payenge.',
+          [{ text: 'Theek Hai' }]
+        );
+      } else {
+        Alert.alert(
+          'Active Admission Required ⚠️',
+          'Attendance mark karne ke liye pehle library me seat reserve karein aur admin se approve karwayein.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Book Seat Now', onPress: () => setActiveTab('Book') }
+          ]
+        );
+      }
+      return;
+    }
+
     if (!cameraPermission?.granted) {
       const permission = await requestCameraPermission();
       if (!permission.granted) {
@@ -667,27 +694,95 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
             </View>
           </View>
 
-          {/* Gate Attendance Scanner CTA */}
-          <TouchableOpacity 
-            style={{
-              backgroundColor: COLORS.primary,
-              borderRadius: 14,
-              paddingVertical: 14,
-              paddingHorizontal: 16,
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 8,
-              marginTop: 14,
-            }}
-            onPress={handleOpenGateScanner}
-            activeOpacity={0.85}
-          >
-            <Ionicons name="qr-code-outline" size={20} color="#ffffff" />
-            <Text style={{ color: '#ffffff', fontWeight: '700', fontSize: 15 }}>
-              Scan Gate QR Pass (Punch IN / OUT)
-            </Text>
-          </TouchableOpacity>
+          {/* Gate Attendance Scanner CTA - Conditional on Admission Approval */}
+          {isApproved ? (
+            <TouchableOpacity 
+              style={{
+                backgroundColor: '#059669',
+                borderRadius: 14,
+                paddingVertical: 14,
+                paddingHorizontal: 16,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 10,
+                marginTop: 14,
+                elevation: 3,
+                shadowColor: '#059669',
+                shadowOpacity: 0.35,
+                shadowRadius: 6,
+              }}
+              onPress={handleOpenGateScanner}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="qr-code-outline" size={24} color="#ffffff" />
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 15 }}>
+                  📷 Scan Gate QR Pass (Punch IN / OUT)
+                </Text>
+                <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 11, marginTop: 2 }}>
+                  Point camera at gate QR poster to mark attendance
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.7)" />
+            </TouchableOpacity>
+          ) : isPending ? (
+            <TouchableOpacity 
+              style={{
+                backgroundColor: 'rgba(217, 119, 6, 0.12)',
+                borderColor: '#d97706',
+                borderWidth: 1.5,
+                borderRadius: 14,
+                paddingVertical: 13,
+                paddingHorizontal: 16,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 10,
+                marginTop: 14,
+              }}
+              onPress={handleOpenGateScanner}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="lock-closed" size={22} color="#d97706" />
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: '#d97706', fontWeight: '800', fontSize: 14 }}>
+                  🔒 Scanner Locked (Admin Approval Pending)
+                </Text>
+                <Text style={{ color: '#d97706', fontSize: 11, marginTop: 2 }}>
+                  Admin ke approve karte hi attendance scanner unlock hoga
+                </Text>
+              </View>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity 
+              style={{
+                backgroundColor: '#1e293b',
+                borderColor: '#334155',
+                borderWidth: 1,
+                borderRadius: 14,
+                paddingVertical: 13,
+                paddingHorizontal: 16,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 10,
+                marginTop: 14,
+              }}
+              onPress={() => setActiveTab('Book')}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="calendar-outline" size={20} color="#38bdf8" />
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: '#ffffff', fontWeight: '700', fontSize: 14 }}>
+                  Book Seat to Activate Attendance
+                </Text>
+                <Text style={{ color: '#94a3b8', fontSize: 11, marginTop: 2 }}>
+                  Admission approve hote hi pass mil jayega
+                </Text>
+              </View>
+            </TouchableOpacity>
+          )}
 
           {/* Quick Buttons */}
           <View style={[styles.cardActionsRow, { marginTop: 10 }]}>
@@ -1189,7 +1284,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
           <TouchableOpacity 
             style={styles.qrCodeBox} 
             activeOpacity={0.9}
-            onPress={() => Alert.alert('Digital Pass QR', 'Hold this QR code against the gate turnstile scanner.')}
+            onPress={handleOpenGateScanner}
           >
             <Ionicons name="qr-code" size={140} color={COLORS.text} />
             <Animated.View 
@@ -1205,6 +1300,27 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
                 },
               ]} 
             />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={{
+              backgroundColor: '#059669',
+              borderRadius: 12,
+              paddingVertical: 12,
+              paddingHorizontal: 16,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              marginTop: 12,
+            }}
+            onPress={handleOpenGateScanner}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="camera" size={18} color="#ffffff" />
+            <Text style={{ color: '#ffffff', fontWeight: '700', fontSize: 14 }}>
+              📷 Open Camera to Scan Gate QR Pass
+            </Text>
           </TouchableOpacity>
 
           <View style={styles.digitalIdFooter}>

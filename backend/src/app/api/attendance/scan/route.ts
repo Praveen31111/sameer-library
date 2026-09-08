@@ -108,6 +108,20 @@ export async function POST(request: Request) {
                     error: "This pass belongs to another student. Attendance denied."
                 }, { status: 403 });
             }
+
+            // Verify that this student has an APPROVED active admission
+            const approvedBooking = await prisma.booking.findFirst({
+                where: {
+                    studentId: passStudentId,
+                    status: "APPROVED"
+                }
+            });
+
+            if (!approvedBooking) {
+                return NextResponse.json({
+                    error: "Sirf Approved students hi attendance mark kar sakte hain. Aapka admission approve hona baki hai."
+                }, { status: 403 });
+            }
         }
 
         // 2. Fetch Branch details and its set Geofence GPS coordinates

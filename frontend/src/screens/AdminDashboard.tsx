@@ -378,7 +378,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
   const loadActiveTabData = useCallback(async () => {
     setLoading(true);
     if (activeTab === 'Overview') {
-      await Promise.all([fetchStats(), fetchPricing()]);
+      await Promise.all([fetchStats(), fetchPricing(), fetchDuesData('ALL')]);
     }
     else if (activeTab === 'Bookings') await fetchBookings(bookingFilter);
     else if (activeTab === 'Dues') await fetchDuesData(duesFilter);
@@ -1269,6 +1269,100 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                 </Text>
                 <Text style={styles.kpiTapHint}>
                   👆 Tap to view who paid & details
+                </Text>
+              </TouchableOpacity>
+
+              {/* KPI 5: Pending Dues & Defaulters (Clickable directly to Dues Tab) */}
+              <TouchableOpacity 
+                style={[styles.kpiCard, { borderColor: '#ef4444', borderWidth: 1.2 }]}
+                onPress={() => {
+                  setActiveTab('Dues');
+                }}
+                activeOpacity={0.82}
+              >
+                <View style={styles.kpiTopRow}>
+                  <View style={[styles.kpiIconBox, { backgroundColor: 'rgba(239, 68, 68, 0.15)' }]}>
+                    <Ionicons name="alert-circle" size={20} color="#ef4444" />
+                  </View>
+                  <View style={[styles.trendChip, { backgroundColor: 'rgba(239, 68, 68, 0.2)' }]}>
+                    <Text style={[styles.trendChipText, { color: '#ef4444', fontWeight: '800' }]}>
+                      {duesStats?.dueStudentsCount || 0} Pending
+                    </Text>
+                  </View>
+                </View>
+                <Text style={styles.kpiLabel}>Fee Dues Outstanding</Text>
+                <Text style={[styles.kpiValue, { color: '#ef4444' }]}>
+                  ₹{(duesStats?.totalDueOutstanding || 0).toLocaleString()}
+                </Text>
+                <Text style={styles.kpiTapHint}>
+                  👉 Tap to manage Dues & WhatsApp
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Dedicated Payment Dues & Recovery Banner on Overview */}
+            <View style={{
+              backgroundColor: 'rgba(239, 68, 68, 0.08)',
+              borderColor: 'rgba(239, 68, 68, 0.35)',
+              borderWidth: 1.5,
+              borderRadius: 16,
+              padding: 16,
+              marginBottom: 16,
+            }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Ionicons name="wallet-outline" size={20} color="#ef4444" />
+                  <Text style={{ fontSize: 15, fontWeight: '800', color: '#ffffff' }}>
+                    Payment Dues & Recovery
+                  </Text>
+                </View>
+                <View style={{
+                  backgroundColor: '#ef4444',
+                  paddingHorizontal: 8,
+                  paddingVertical: 3,
+                  borderRadius: 10,
+                }}>
+                  <Text style={{ fontSize: 11, fontWeight: '800', color: '#ffffff' }}>
+                    {duesStats?.overdueStudentsCount || 0} OVERDUE
+                  </Text>
+                </View>
+              </View>
+
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, borderTopWidth: 1, borderBottomWidth: 1, borderColor: 'rgba(255,255,255,0.08)', marginVertical: 4 }}>
+                <View>
+                  <Text style={{ fontSize: 11, color: '#8e8e93' }}>Pending Due Balance</Text>
+                  <Text style={{ fontSize: 18, fontWeight: '800', color: '#ef4444', marginTop: 2 }}>
+                    ₹{(duesStats?.totalDueOutstanding || 0).toLocaleString()}
+                  </Text>
+                </View>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={{ fontSize: 11, color: '#8e8e93' }}>Total Fee Collected</Text>
+                  <Text style={{ fontSize: 18, fontWeight: '800', color: '#22c55e', marginTop: 2 }}>
+                    ₹{(duesStats?.totalRevenueCollected || 0).toLocaleString()}
+                  </Text>
+                </View>
+              </View>
+
+              <Text style={{ fontSize: 11, color: '#94a3b8', marginTop: 6, marginBottom: 12 }}>
+                Cash: ₹{duesStats?.cashCollected || 0} • Admin GPay/UPI: ₹{duesStats?.gpayCollected || 0} • Gateway: ₹{duesStats?.gatewayCollected || 0}
+              </Text>
+
+              <TouchableOpacity
+                style={{
+                  backgroundColor: '#0d9488',
+                  borderRadius: 10,
+                  paddingVertical: 10,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                }}
+                onPress={() => setActiveTab('Dues')}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="paper-plane" size={16} color="#ffffff" />
+                <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 13 }}>
+                  View All Student Dues & Send WhatsApp Notice →
                 </Text>
               </TouchableOpacity>
             </View>
