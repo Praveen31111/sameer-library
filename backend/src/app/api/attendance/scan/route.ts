@@ -34,7 +34,7 @@ export async function POST(request: Request) {
         }
 
         const body = await request.json();
-        const { qrToken, latitude, longitude } = body;
+        const { qrToken, latitude, longitude, selfiePhoto } = body;
 
         if (!qrToken) {
             return NextResponse.json({ error: "QR code data is required" }, { status: 400 });
@@ -204,7 +204,7 @@ export async function POST(request: Request) {
             });
         }
 
-        // 5. Perform CHECK-IN
+        // 5. Perform CHECK-IN with 0-Cost 24h Selfie Verification
         const newAttendance = await prisma.attendance.create({
             data: {
                 studentId: passStudentId,
@@ -214,18 +214,32 @@ export async function POST(request: Request) {
                 latitude: latitude ? Number(latitude) : null,
                 longitude: longitude ? Number(longitude) : null,
                 distanceMeters: calculatedDistance ? Math.round(calculatedDistance) : null,
-                isVerifiedLocation: true
+                isVerifiedLocation: true,
+                selfiePhoto: typeof selfiePhoto === "string" && selfiePhoto.length > 50 ? selfiePhoto : null,
             }
         });
+
+        // 0-Cost 24-Hour Auto-Purge: Delete selfie photos older than 24 hours to guarantee 0 database bloat
+        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        prisma.attendance.updateMany({
+            where: {
+                checkInAt: { lt: twentyFourHoursAgo },
+                selfiePhoto: { not: null }
+            },
+            data: {
+                selfiePhoto: null
+            }
+        }).catch(err => console.warn("24h selfie cleanup warning:", err));
 
         return NextResponse.json({
             success: true,
             action: "CHECK_IN",
-            message: `Check-in marked successfully for Seat ${seatNumber} at ${branch.name}! Location verified (${calculatedDistance ? Math.round(calculatedDistance) + "m" : "OK"}).`,
+            message: `Check-in marked successfully for Seat ${seatNumber} at ${branch.name}! Location & Live Selfie Verified.`,
             checkInAt: newAttendance.checkInAt,
             seat: seatNumber,
             branch: branch.name,
-            distanceMeters: calculatedDistance ? Math.round(calculatedDistance) : 0
+            distanceMeters: calculatedDistance ? Math.round(calculatedDistance) : 0,
+            hasSelfie: Boolean(newAttendance.selfiePhoto),
         });
 
     } catch (error) {

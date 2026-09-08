@@ -60,14 +60,54 @@ export async function GET() {
 
         // Find today's active or completed attendance record
         const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth(); // 0-indexed
+        const totalDaysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+
+        // Calculate attended day numbers for current month
+        const presentDaysSet = new Set<number>();
+        attendance.forEach(a => {
+            const d = new Date(a.checkInAt);
+            if (d.getFullYear() === currentYear && d.getMonth() === currentMonth) {
+                presentDaysSet.add(d.getDate());
+            }
+        });
+        const presentDaysThisMonth = Array.from(presentDaysSet).sort((a, b) => a - b);
+        const monthlyPresentCount = presentDaysThisMonth.length;
+        const monthlyAttendancePercent = totalDaysInMonth > 0 
+            ? Math.round((monthlyPresentCount / now.getDate()) * 100) 
+            : 0;
+
         const todayRecord = formattedAttendance.find(a => {
             const d = new Date(a.checkIn);
             return d.getDate() === now.getDate() && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
         });
 
+        // 24-Hour Auto-Purge of old selfies (0 cost safeguard)
+        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        prisma.attendance.updateMany({
+            where: {
+                checkInAt: { lt: twentyFourHoursAgo },
+                selfiePhoto: { not: null }
+            },
+            data: {
+                selfiePhoto: null
+            }
+        }).catch(() => {});
+
         return NextResponse.json({
             attendance: formattedAttendance,
             todayAttendance: todayRecord || null,
+            calendar: {
+                monthName: now.toLocaleDateString("en-IN", { month: "long", year: "numeric" }),
+                month: currentMonth,
+                year: currentYear,
+                totalDaysInMonth,
+                todayDate: now.getDate(),
+                presentDays: presentDaysThisMonth,
+                monthlyPresentCount,
+                monthlyAttendancePercent: Math.min(100, monthlyAttendancePercent),
+            },
             stats: {
                 daysPresent,
                 totalHours: Math.round(totalHours),

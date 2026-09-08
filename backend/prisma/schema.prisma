@@ -197,6 +197,9 @@ model Attendance {
   distanceMeters     Float?
   isVerifiedLocation Boolean   @default(true)
 
+  // 0-Cost 24-Hour Selfie Verification Photo
+  selfiePhoto        String?   @db.Text
+
   createdAt          DateTime  @default(now())
 
   // Relations

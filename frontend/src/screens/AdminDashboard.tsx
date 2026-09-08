@@ -178,10 +178,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
   const [logsSubTab, setLogsSubTab] = useState<'Attendance' | 'Payments'>('Attendance');
   const [attendanceLogs, setAttendanceLogs] = useState<any[]>([]);
   const [paymentLogs, setPaymentLogs] = useState<any[]>([]);
+  const [selectedSelfiePreview, setSelectedSelfiePreview] = useState<any>(null);
 
   // Hardware Back Button Navigation Handler (Step-by-step back)
   useEffect(() => {
     const handleHardwareBack = () => {
+      if (selectedSelfiePreview) {
+        setSelectedSelfiePreview(null);
+        return true;
+      }
       if (pricingModalVisible) {
         setPricingModalVisible(false);
         return true;
@@ -234,6 +239,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
     const sub = BackHandler.addEventListener('hardwareBackPress', handleHardwareBack);
     return () => sub.remove();
   }, [
+    selectedSelfiePreview,
     pricingModalVisible,
     revenueModalVisible,
     approvalModalVisible,
@@ -2403,9 +2409,97 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                 renderItem={({ item }) => (
                   <View style={styles.logCard}>
                     <View style={styles.logCardHeader}>
+                      {/* Selfie Thumbnail or Avatar */}
+                      {item.selfiePhoto ? (
+                        <TouchableOpacity
+                          activeOpacity={0.8}
+                          onPress={() => setSelectedSelfiePreview(item)}
+                          style={{ marginRight: 12, position: 'relative' }}
+                        >
+                          <Image
+                            source={{ uri: item.selfiePhoto }}
+                            style={{
+                              width: 46,
+                              height: 46,
+                              borderRadius: 23,
+                              borderWidth: 2,
+                              borderColor: '#10b981',
+                              backgroundColor: '#e2e8f0',
+                            }}
+                          />
+                          <View
+                            style={{
+                              position: 'absolute',
+                              bottom: -2,
+                              right: -2,
+                              backgroundColor: '#10b981',
+                              borderRadius: 9,
+                              width: 18,
+                              height: 18,
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              borderWidth: 1.5,
+                              borderColor: '#fff',
+                            }}
+                          >
+                            <Ionicons name="camera" size={10} color="#fff" />
+                          </View>
+                        </TouchableOpacity>
+                      ) : (
+                        <View
+                          style={{
+                            width: 46,
+                            height: 46,
+                            borderRadius: 23,
+                            backgroundColor: '#f1f5f9',
+                            borderWidth: 1,
+                            borderColor: '#e2e8f0',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            marginRight: 12,
+                          }}
+                        >
+                          <Ionicons name="person-outline" size={22} color="#94a3b8" />
+                        </View>
+                      )}
+
                       <View style={{ flex: 1 }}>
                         <Text style={styles.logStudentName}>{item.studentName}</Text>
-                        <Text style={styles.logBranch}>{item.branch}</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 }}>
+                          <Text style={styles.logBranch}>{item.branch}</Text>
+                          {item.selfiePhoto ? (
+                            <TouchableOpacity
+                              onPress={() => setSelectedSelfiePreview(item)}
+                              style={{
+                                backgroundColor: '#ecfdf5',
+                                paddingHorizontal: 7,
+                                paddingVertical: 2,
+                                borderRadius: 6,
+                                borderWidth: 1,
+                                borderColor: '#a7f3d0',
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                gap: 3,
+                              }}
+                            >
+                              <Ionicons name="eye" size={10} color="#059669" />
+                              <Text style={{ fontSize: 10, fontWeight: '700', color: '#059669' }}>View Photo</Text>
+                            </TouchableOpacity>
+                          ) : (
+                            <View
+                              style={{
+                                backgroundColor: '#f8fafc',
+                                paddingHorizontal: 6,
+                                paddingVertical: 2,
+                                borderRadius: 6,
+                                borderWidth: 1,
+                                borderColor: '#e2e8f0',
+                              }}
+                            >
+                              <Text style={{ fontSize: 9, fontWeight: '600', color: '#94a3b8' }}>Purged (24h)</Text>
+                            </View>
+                          )}
+                        </View>
                       </View>
                       <View style={{ alignItems: 'flex-end', gap: 4 }}>
                         <View style={[styles.statusPill, item.status === 'Active' ? styles.statusPending : styles.statusApproved]}>
@@ -3734,6 +3828,90 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
               <Text style={styles.modalSubmitBtnText}>
                 {submittingCollection ? 'Recording...' : `Record ₹${collectAmount || '0'} Payment`}
               </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 9. Attendance Selfie Photo Verification Preview Modal */}
+      <Modal
+        visible={!!selectedSelfiePreview}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setSelectedSelfiePreview(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <Pressable style={styles.modalBackdrop} onPress={() => setSelectedSelfiePreview(null)} />
+          <View style={[styles.modalContent, { maxWidth: 360, padding: 20, alignItems: 'center' }]}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: 14 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: '#ecfdf5', alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="camera" size={18} color="#059669" />
+                </View>
+                <View>
+                  <Text style={{ fontSize: 16, fontWeight: '800', color: '#0f172a' }}>Punch-In Selfie</Text>
+                  <Text style={{ fontSize: 11, fontWeight: '600', color: '#64748b' }}>Live Verification Photo</Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                onPress={() => setSelectedSelfiePreview(null)}
+                style={{ padding: 6, borderRadius: 16, backgroundColor: '#f1f5f9' }}
+              >
+                <Ionicons name="close" size={20} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+
+            {selectedSelfiePreview?.selfiePhoto ? (
+              <View style={{ width: '100%', alignItems: 'center' }}>
+                <Image
+                  source={{ uri: selectedSelfiePreview.selfiePhoto }}
+                  style={{
+                    width: 260,
+                    height: 320,
+                    borderRadius: 16,
+                    borderWidth: 3,
+                    borderColor: '#10b981',
+                    backgroundColor: '#0f172a',
+                  }}
+                  resizeMode="cover"
+                />
+                <View style={{ width: '100%', backgroundColor: '#f8fafc', borderRadius: 12, padding: 12, marginTop: 14, borderWidth: 1, borderColor: '#e2e8f0' }}>
+                  <Text style={{ fontSize: 15, fontWeight: '800', color: '#0f172a', marginBottom: 4 }}>
+                    👤 {selectedSelfiePreview.studentName}
+                  </Text>
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#475569', marginBottom: 2 }}>
+                    📍 {selectedSelfiePreview.branch}
+                  </Text>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#0d9488' }}>
+                      ⏰ Punch: {selectedSelfiePreview.checkIn}
+                    </Text>
+                    <Text style={{ fontSize: 12, fontWeight: '600', color: '#64748b' }}>
+                      📅 {selectedSelfiePreview.date}
+                    </Text>
+                  </View>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, backgroundColor: '#f0fdf4', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 }}>
+                  <Ionicons name="shield-checkmark" size={14} color="#16a34a" />
+                  <Text style={{ fontSize: 11, fontWeight: '600', color: '#166534' }}>
+                    🔒 0-Cost Security: 24h me auto-purge ho jayegi
+                  </Text>
+                </View>
+              </View>
+            ) : (
+              <View style={{ padding: 24, alignItems: 'center' }}>
+                <Ionicons name="time-outline" size={48} color="#94a3b8" />
+                <Text style={{ fontSize: 14, fontWeight: '700', color: '#64748b', marginTop: 12, textAlign: 'center' }}>
+                  Yeh photo 24 ghante purani ho chuki hai isliye zero-cost storage policy ke tahat auto-delete ho chuki hai.
+                </Text>
+              </View>
+            )}
+
+            <TouchableOpacity
+              style={[styles.modalSubmitBtn, { width: '100%', marginTop: 16, backgroundColor: '#0d9488' }]}
+              onPress={() => setSelectedSelfiePreview(null)}
+            >
+              <Text style={styles.modalSubmitBtnText}>Done / Close</Text>
             </TouchableOpacity>
           </View>
         </View>

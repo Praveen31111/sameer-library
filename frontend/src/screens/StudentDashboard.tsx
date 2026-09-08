@@ -51,10 +51,16 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
   const [loadingSeats, setLoadingSeats] = useState(false);
   const [zoneFilter, setZoneFilter] = useState<'ALL' | 'SILENT' | 'GROUP' | 'MONITOR'>('ALL');
   
-  // Gate Attendance QR Scanner State
+  // Gate Attendance QR & 2-Step Selfie Scanner State
   const [showScanner, setShowScanner] = useState(false);
+  const [scannerStep, setScannerStep] = useState<'QR' | 'SELFIE'>('QR');
+  const [cameraFacing, setCameraFacing] = useState<'back' | 'front'>('back');
+  const [scannedQrToken, setScannedQrToken] = useState<string | null>(null);
+  const [capturingSelfie, setCapturingSelfie] = useState(false);
+  const [calendarData, setCalendarData] = useState<any>(null);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const scanningLock = useRef(false);
+  const cameraRef = useRef<any>(null);
 
   // Dynamic Pricing & Discount Offer State (Monthly-only)
   const [pricingConfig, setPricingConfig] = useState<any>({
@@ -339,18 +345,54 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
       console.warn('Location permission check warning:', err);
     }
 
+    setScannerStep('QR');
+    setCameraFacing('back');
+    setScannedQrToken(null);
     setShowScanner(true);
   };
 
-  // Handle scanned Gate QR Pass
+  // Step 1: Handle scanned Gate QR Pass (Triggers Front Camera for Step 2)
   const handleBarCodeScanned = async ({ data }: { data: string }) => {
-    if (scanningLock.current) return;
+    if (scanningLock.current || scannerStep !== 'QR') return;
     scanningLock.current = true;
 
     try {
+      setScannedQrToken(data);
+      // Seamlessly switch to Step 2: Front Camera Live Selfie Verification
+      setCameraFacing('front');
+      setScannerStep('SELFIE');
+    } catch (err: any) {
+      console.warn('QR scan transition error:', err);
+    } finally {
+      setTimeout(() => {
+        scanningLock.current = false;
+      }, 1000);
+    }
+  };
+
+  // Step 2: Capture Front Camera Live Selfie & Submit Attendance (0-Cost, auto-purges in 24h)
+  const handleCaptureAndPunch = async (skipSelfie = false) => {
+    if (capturingSelfie) return;
+    setCapturingSelfie(true);
+
+    try {
+      let selfieBase64: string | null = null;
+      if (!skipSelfie && cameraRef.current) {
+        try {
+          const photo = await cameraRef.current.takePictureAsync({
+            quality: 0.25,
+            base64: true,
+          });
+          if (photo?.base64) {
+            selfieBase64 = `data:image/jpeg;base64,${photo.base64}`;
+          }
+        } catch (photoErr) {
+          console.warn('Selfie photo capture warning:', photoErr);
+        }
+      }
+
       let latitude: number | null = null;
       let longitude: number | null = null;
-
       try {
         const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
         if (loc?.coords) {
@@ -364,13 +406,16 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
       const res = await apiRequest('/attendance/scan', {
         method: 'POST',
         body: JSON.stringify({
-          qrToken: data,
+          qrToken: scannedQrToken,
           latitude,
           longitude,
+          selfiePhoto: selfieBase64,
         }),
       });
 
       setShowScanner(false);
+      setScannerStep('QR');
+      setCameraFacing('back');
 
       if (res.success) {
         const checkTime = new Date(res.checkInAt || res.checkOutAt || Date.now()).toLocaleTimeString('en-IN', {
@@ -390,7 +435,8 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
           `📅 Date: ${checkDate}\n` +
           `⏰ Time: ${checkTime}\n` +
           `📍 Branch: ${res.branch || currentBranchName || 'Library Gate'}\n` +
-          `🪑 Seat: ${res.seat || currentSeatName || 'Assigned Seat'}` +
+          `🪑 Seat: ${res.seat || currentSeatName || 'Assigned Seat'}\n` +
+          `🤳 Selfie Verification: ${res.hasSelfie ? 'Verified (24h proof saved)' : 'Location Verified'}` +
           (res.message ? `\n\n${res.message}` : '');
 
         Alert.alert(title, msg, [{ text: 'OK', onPress: () => fetchOverviewData() }]);
@@ -400,15 +446,15 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
       }
     } catch (err: any) {
       setShowScanner(false);
-      Alert.alert('Attendance Failed', err.message || 'Location verification or QR token check failed.');
+      setScannerStep('QR');
+      setCameraFacing('back');
+      Alert.alert('Attendance Failed', err.message || 'Location verification or selfie check failed.');
     } finally {
-      setTimeout(() => {
-        scanningLock.current = false;
-      }, 2000);
+      setCapturingSelfie(false);
     }
   };
 
-  // Fetch Overview data (attendance stats + bookings list)
+  // Fetch Overview data (attendance stats + bookings list + monthly calendar)
   const fetchOverviewData = async () => {
     setLoading(true);
     try {
@@ -418,6 +464,9 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
       }
       if (attRes.todayAttendance !== undefined) {
         setTodayAttendance(attRes.todayAttendance);
+      }
+      if (attRes.calendar) {
+        setCalendarData(attRes.calendar);
       }
       if (attRes.stats) {
         setStats(attRes.stats);
@@ -958,6 +1007,118 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
               )}
             </View>
           )}
+        </View>
+
+        {/* ---------------- MONTHLY ATTENDANCE CALENDAR (मंथली हाज़िरी कैलेंडर) ---------------- */}
+        <View style={{
+          backgroundColor: '#0f172a',
+          borderColor: '#1e293b',
+          borderWidth: 1.5,
+          borderRadius: 20,
+          padding: 16,
+          marginBottom: 16,
+        }}>
+          {/* Header */}
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Ionicons name="calendar" size={18} color="#10b981" />
+              <Text style={{ color: '#ffffff', fontSize: 14, fontWeight: '800' }}>
+                {calendarData?.monthName || 'Monthly Attendance'}
+              </Text>
+            </View>
+            <View style={{ backgroundColor: 'rgba(16, 185, 129, 0.15)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 }}>
+              <Text style={{ color: '#10b981', fontSize: 11, fontWeight: '800' }}>
+                {calendarData?.monthlyPresentCount || stats?.daysPresent || 0} Days Present
+              </Text>
+            </View>
+          </View>
+
+          {/* Quick Metrics Bar */}
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', backgroundColor: '#1e293b', borderRadius: 12, padding: 10, marginBottom: 14 }}>
+            <View style={{ alignItems: 'center', flex: 1 }}>
+              <Text style={{ color: '#94a3b8', fontSize: 10, fontWeight: '700' }}>THIS MONTH</Text>
+              <Text style={{ color: '#ffffff', fontSize: 15, fontWeight: '800', marginTop: 2 }}>
+                {calendarData?.monthlyPresentCount || 0} / {calendarData?.totalDaysInMonth || 30}
+              </Text>
+            </View>
+            <View style={{ width: 1, backgroundColor: '#334155' }} />
+            <View style={{ alignItems: 'center', flex: 1 }}>
+              <Text style={{ color: '#94a3b8', fontSize: 10, fontWeight: '700' }}>ATTENDANCE</Text>
+              <Text style={{ color: '#10b981', fontSize: 15, fontWeight: '800', marginTop: 2 }}>
+                {calendarData?.monthlyAttendancePercent || 0}%
+              </Text>
+            </View>
+            <View style={{ width: 1, backgroundColor: '#334155' }} />
+            <View style={{ alignItems: 'center', flex: 1 }}>
+              <Text style={{ color: '#94a3b8', fontSize: 10, fontWeight: '700' }}>STREAK</Text>
+              <Text style={{ color: '#f59e0b', fontSize: 15, fontWeight: '800', marginTop: 2 }}>
+                {stats?.streak || 0} Days 🔥
+              </Text>
+            </View>
+          </View>
+
+          {/* Weekday headers (M T W T F S S) */}
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8, paddingHorizontal: 4 }}>
+            {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day, dIdx) => (
+              <Text key={dIdx} style={{ width: 34, textAlign: 'center', color: '#64748b', fontSize: 11, fontWeight: '700' }}>
+                {day}
+              </Text>
+            ))}
+          </View>
+
+          {/* Monthly Calendar Grid (Days 1 to 30/31) */}
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'flex-start' }}>
+            {Array.from({ length: calendarData?.totalDaysInMonth || 30 }, (_, i) => i + 1).map((dayNum) => {
+              const isPresent = calendarData?.presentDays?.includes(dayNum);
+              const isToday = dayNum === (calendarData?.todayDate || new Date().getDate());
+              return (
+                <View
+                  key={dayNum}
+                  style={{
+                    width: (width - 40 - 32 - 36) / 7,
+                    height: 36,
+                    borderRadius: 8,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: isPresent 
+                      ? '#10b981' 
+                      : isToday 
+                        ? 'rgba(56, 189, 248, 0.2)' 
+                        : '#1e293b',
+                    borderColor: isToday ? '#38bdf8' : isPresent ? '#059669' : '#334155',
+                    borderWidth: isToday ? 1.5 : 1,
+                  }}
+                >
+                  <Text style={{
+                    color: isPresent ? '#ffffff' : isToday ? '#38bdf8' : '#94a3b8',
+                    fontSize: 12,
+                    fontWeight: isPresent || isToday ? '800' : '600',
+                  }}>
+                    {dayNum}
+                  </Text>
+                  {isPresent && (
+                    <View style={{ position: 'absolute', bottom: 3, width: 4, height: 4, borderRadius: 2, backgroundColor: '#ffffff' }} />
+                  )}
+                </View>
+              );
+            })}
+          </View>
+
+          {/* Legend */}
+          <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 14, marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#1e293b' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+              <View style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: '#10b981' }} />
+              <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: '600' }}>Present (उपस्थित)</Text>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+              <View style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: '#1e293b', borderWidth: 1, borderColor: '#334155' }} />
+              <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: '600' }}>Absent (अनुपस्थित)</Text>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+              <View style={{ width: 10, height: 10, borderRadius: 3, borderColor: '#38bdf8', borderWidth: 1.5 }} />
+              <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: '600' }}>Today (आज)</Text>
+            </View>
+          </View>
         </View>
 
         {/* ---------------- RECENT ATTENDANCE HISTORY LIST ---------------- */}
@@ -1834,7 +1995,11 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
             zIndex: 10
           }}>
             <TouchableOpacity
-              onPress={() => setShowScanner(false)}
+              onPress={() => {
+                setShowScanner(false);
+                setScannerStep('QR');
+                setCameraFacing('back');
+              }}
               style={{
                 width: 38,
                 height: 38,
@@ -1847,72 +2012,151 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
               <Ionicons name="close" size={22} color="#ffffff" />
             </TouchableOpacity>
             <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: '700' }}>
-              Scan Gate Attendance Pass
+              {scannerStep === 'QR' ? 'Step 1/2: Scan Gate Pass' : 'Step 2/2: Quick Selfie 🤳'}
             </Text>
             <View style={{ width: 38 }} />
           </View>
 
           <View style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
             <CameraView
+              ref={cameraRef}
               style={StyleSheet.absoluteFillObject}
-              facing="back"
+              facing={cameraFacing}
               barcodeScannerSettings={{
                 barcodeTypes: ["qr"],
               }}
-              onBarcodeScanned={handleBarCodeScanned}
+              onBarcodeScanned={scannerStep === 'QR' ? handleBarCodeScanned : undefined}
             />
 
-            {/* Target Reticle Overlay */}
-            <View style={{
-              ...StyleSheet.absoluteFillObject,
-              alignItems: 'center',
-              justifyContent: 'center',
-              backgroundColor: 'rgba(0,0,0,0.45)'
-            }}>
+            {scannerStep === 'QR' ? (
+              /* Step 1: QR Target Reticle Overlay */
               <View style={{
-                width: 250,
-                height: 250,
-                borderWidth: 2,
-                borderColor: '#22c55e',
-                borderRadius: 16,
-                backgroundColor: 'transparent',
-                position: 'relative'
+                ...StyleSheet.absoluteFillObject,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: 'rgba(0,0,0,0.45)'
               }}>
-                <Animated.View style={{
-                  height: 3,
-                  backgroundColor: '#22c55e',
-                  width: '100%',
-                  shadowColor: '#22c55e',
-                  shadowOpacity: 0.9,
-                  shadowRadius: 8,
-                  transform: [{
-                    translateY: laserAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [0, 245]
-                    })
-                  }]
-                }} />
-              </View>
+                <View style={{
+                  width: 250,
+                  height: 250,
+                  borderWidth: 2,
+                  borderColor: '#22c55e',
+                  borderRadius: 16,
+                  backgroundColor: 'transparent',
+                  position: 'relative'
+                }}>
+                  <Animated.View style={{
+                    height: 3,
+                    backgroundColor: '#22c55e',
+                    width: '100%',
+                    shadowColor: '#22c55e',
+                    shadowOpacity: 0.9,
+                    shadowRadius: 8,
+                    transform: [{
+                      translateY: laserAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0, 245]
+                      })
+                    }]
+                  }} />
+                </View>
 
-              <Text style={{
-                color: '#ffffff',
-                fontSize: 14,
-                fontWeight: '700',
-                marginTop: 24,
-                textAlign: 'center',
-                paddingHorizontal: 30
+                <Text style={{
+                  color: '#ffffff',
+                  fontSize: 15,
+                  fontWeight: '800',
+                  marginTop: 24,
+                  textAlign: 'center',
+                  paddingHorizontal: 30
+                }}>
+                  Point camera at Gate QR Poster at entrance
+                </Text>
+                <Text style={{
+                  color: 'rgba(255,255,255,0.7)',
+                  fontSize: 12,
+                  marginTop: 6,
+                  textAlign: 'center'
+                }}>
+                  📍 Live GPS location validates you are inside library premises
+                </Text>
+              </View>
+            ) : (
+              /* Step 2: Front Camera Live Selfie Verification Overlay */
+              <View style={{
+                ...StyleSheet.absoluteFillObject,
+                justifyContent: 'space-between',
+                paddingVertical: 30,
+                backgroundColor: 'rgba(0,0,0,0.25)'
               }}>
-                Point camera at Gate QR Poster at entrance
-              </Text>
-              <Text style={{
-                color: 'rgba(255,255,255,0.7)',
-                fontSize: 12,
-                marginTop: 6,
-                textAlign: 'center'
-              }}>
-                📍 Live GPS location validates you are inside library premises
-              </Text>
-            </View>
+                <View style={{ alignItems: 'center', paddingHorizontal: 20 }}>
+                  <View style={{ backgroundColor: 'rgba(16, 185, 129, 0.9)', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20 }}>
+                    <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 13 }}>
+                      ✓ Gate QR Scanned Successfully
+                    </Text>
+                  </View>
+                  <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: '800', marginTop: 10 }}>
+                    Align your face inside the circle 🧑
+                  </Text>
+                </View>
+
+                {/* Face Target Oval */}
+                <View style={{
+                  alignSelf: 'center',
+                  width: 240,
+                  height: 280,
+                  borderRadius: 120,
+                  borderWidth: 3,
+                  borderColor: '#10b981',
+                  borderStyle: 'dashed',
+                  backgroundColor: 'transparent',
+                }} />
+
+                {/* Bottom Capture Buttons */}
+                <View style={{ paddingHorizontal: 20 }}>
+                  <TouchableOpacity
+                    onPress={() => handleCaptureAndPunch(false)}
+                    disabled={capturingSelfie}
+                    activeOpacity={0.85}
+                    style={{
+                      backgroundColor: '#10b981',
+                      borderRadius: 16,
+                      paddingVertical: 15,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                      elevation: 4,
+                      shadowColor: '#10b981',
+                      shadowOpacity: 0.4,
+                      shadowRadius: 8,
+                    }}
+                  >
+                    {capturingSelfie ? (
+                      <ActivityIndicator color="#ffffff" size="small" />
+                    ) : (
+                      <Ionicons name="camera" size={22} color="#ffffff" />
+                    )}
+                    <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 15 }}>
+                      {capturingSelfie ? 'Verifying & Punching...' : 'Take Selfie & Punch Attendance'}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => handleCaptureAndPunch(true)}
+                    disabled={capturingSelfie}
+                    style={{ alignSelf: 'center', paddingVertical: 10 }}
+                  >
+                    <Text style={{ color: '#94a3b8', fontSize: 13, textDecorationLine: 'underline' }}>
+                      Skip Selfie (Location Only Punch)
+                    </Text>
+                  </TouchableOpacity>
+
+                  <Text style={{ color: 'rgba(255,255,255,0.55)', fontSize: 11, textAlign: 'center', marginTop: 2 }}>
+                    🔒 0-Cost Security: Selfie photo 24 ghante baad auto-delete ho jayegi.
+                  </Text>
+                </View>
+              </View>
+            )}
           </View>
         </SafeAreaView>
       </Modal>

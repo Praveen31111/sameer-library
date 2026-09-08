@@ -57,7 +57,8 @@ export async function GET(request: Request) {
                 status: a.checkOutAt ? "Completed" : "Active",
                 duration: durationStr,
                 source: a.source || "QR_CODE",
-                isVerifiedLocation: a.isVerifiedLocation
+                isVerifiedLocation: a.isVerifiedLocation,
+                selfiePhoto: a.selfiePhoto || null,
             };
         });
 
