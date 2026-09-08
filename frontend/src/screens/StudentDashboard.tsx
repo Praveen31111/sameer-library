@@ -36,6 +36,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
 
   // API States
   const [stats, setStats] = useState<{ daysPresent: number; totalHours: number; avgHoursPerDay: string; streak: number } | null>(null);
+  const [todayAttendance, setTodayAttendance] = useState<any>(null);
   const [attendanceLogs, setAttendanceLogs] = useState<any[]>([]);
   const [bookingsList, setBookingsList] = useState<any[]>([]);
   const [branches, setBranches] = useState<any[]>([]);
@@ -372,10 +373,27 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
       setShowScanner(false);
 
       if (res.success) {
-        Alert.alert(
-          res.action === 'CHECK_OUT' ? 'Punch OUT Successful! 👋' : 'Punch IN Successful! 🎉',
-          res.message || 'Attendance updated successfully!'
-        );
+        const checkTime = new Date(res.checkInAt || res.checkOutAt || Date.now()).toLocaleTimeString('en-IN', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
+        });
+        const checkDate = new Date().toLocaleDateString('en-IN', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+        });
+
+        const isCheckOut = res.action === 'CHECK_OUT';
+        const title = isCheckOut ? 'Punch OUT Recorded! 👋' : 'Punch IN Successful! 🎉';
+        const msg = `${isCheckOut ? 'Aapka Check-Out lag gaya hai.' : 'Aapki Attendance lag gayi hai!'}\n\n` +
+          `📅 Date: ${checkDate}\n` +
+          `⏰ Time: ${checkTime}\n` +
+          `📍 Branch: ${res.branch || currentBranchName || 'Library Gate'}\n` +
+          `🪑 Seat: ${res.seat || currentSeatName || 'Assigned Seat'}` +
+          (res.message ? `\n\n${res.message}` : '');
+
+        Alert.alert(title, msg, [{ text: 'OK', onPress: () => fetchOverviewData() }]);
         fetchOverviewData();
       } else {
         Alert.alert('Attendance Failed', res.error || 'Could not verify pass.');
@@ -396,7 +414,10 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
     try {
       const attRes = await apiRequest('/attendance');
       if (attRes.attendance) {
-        setAttendanceLogs(attRes.attendance.slice(0, 5));
+        setAttendanceLogs(attRes.attendance);
+      }
+      if (attRes.todayAttendance !== undefined) {
+        setTodayAttendance(attRes.todayAttendance);
       }
       if (attRes.stats) {
         setStats(attRes.stats);
@@ -794,6 +815,228 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
               <Text style={styles.cardActionBtnText}>View Bookings</Text>
             </TouchableOpacity>
           </View>
+        </View>
+
+        {/* ---------------- TODAY'S ATTENDANCE STATUS CARD ---------------- */}
+        <View style={{
+          backgroundColor: todayAttendance?.status === 'PUNCHED_IN' 
+            ? 'rgba(16, 185, 129, 0.08)' 
+            : todayAttendance?.status === 'COMPLETED'
+              ? 'rgba(14, 165, 233, 0.08)'
+              : 'rgba(30, 41, 59, 0.6)',
+          borderColor: todayAttendance?.status === 'PUNCHED_IN'
+            ? '#10b981'
+            : todayAttendance?.status === 'COMPLETED'
+              ? '#0284c7'
+              : '#334155',
+          borderWidth: 1.5,
+          borderRadius: 20,
+          padding: 16,
+          marginTop: 16,
+          marginBottom: 16,
+        }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Ionicons 
+                name={todayAttendance?.status === 'PUNCHED_IN' ? 'finger-print' : todayAttendance?.status === 'COMPLETED' ? 'checkmark-done-circle' : 'time-outline'} 
+                size={22} 
+                color={todayAttendance?.status === 'PUNCHED_IN' ? '#10b981' : todayAttendance?.status === 'COMPLETED' ? '#0284c7' : '#94a3b8'} 
+              />
+              <Text style={{ fontSize: 13, fontWeight: '800', color: todayAttendance?.status === 'PUNCHED_IN' ? '#10b981' : todayAttendance?.status === 'COMPLETED' ? '#0284c7' : '#94a3b8', letterSpacing: 0.8 }}>
+                TODAY'S ATTENDANCE (आज की हाज़िरी)
+              </Text>
+            </View>
+
+            {todayAttendance ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.06)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
+                <Ionicons name="calendar-outline" size={12} color="#cbd5e1" />
+                <Text style={{ fontSize: 11, fontWeight: '700', color: '#cbd5e1' }}>
+                  {todayAttendance.dateString || 'Today'}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+
+          {todayAttendance?.status === 'PUNCHED_IN' ? (
+            <View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'rgba(16, 185, 129, 0.15)', padding: 14, borderRadius: 14 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: '#10b981', fontSize: 11, fontWeight: '800', textTransform: 'uppercase' }}>
+                    🟢 Punched IN • Studying Now
+                  </Text>
+                  <Text style={{ color: '#ffffff', fontSize: 22, fontWeight: '900', marginTop: 2 }}>
+                    {todayAttendance.timeIn}
+                  </Text>
+                  <Text style={{ color: '#94a3b8', fontSize: 12, marginTop: 2 }}>
+                    📍 {todayAttendance.branchName || currentBranchName || 'Library'}
+                  </Text>
+                </View>
+
+                {isApproved && (
+                  <TouchableOpacity
+                    onPress={handleOpenGateScanner}
+                    activeOpacity={0.85}
+                    style={{
+                      backgroundColor: '#10b981',
+                      paddingHorizontal: 14,
+                      paddingVertical: 10,
+                      borderRadius: 10,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 6,
+                    }}
+                  >
+                    <Ionicons name="exit-outline" size={16} color="#ffffff" />
+                    <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 12 }}>
+                      Punch OUT
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+              <Text style={{ color: '#6ee7b7', fontSize: 11, marginTop: 8, textAlign: 'center' }}>
+                ✅ Attendance lag chuki hai. Library se bahar jate waqt QR scan karke Punch OUT karein.
+              </Text>
+            </View>
+          ) : todayAttendance?.status === 'COMPLETED' ? (
+            <View>
+              <View style={{ backgroundColor: 'rgba(2, 132, 199, 0.12)', padding: 14, borderRadius: 14 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                  <Text style={{ color: '#38bdf8', fontSize: 12, fontWeight: '800' }}>
+                    ✅ COMPLETED TODAY (हाज़िरी पूरी हुई)
+                  </Text>
+                  <Text style={{ color: '#ffffff', fontSize: 12, fontWeight: '800', backgroundColor: '#0284c7', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}>
+                    ⏱️ {todayAttendance.duration}
+                  </Text>
+                </View>
+
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <View>
+                    <Text style={{ color: '#94a3b8', fontSize: 11 }}>Punch IN Time</Text>
+                    <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: '800', marginTop: 2 }}>
+                      {todayAttendance.timeIn}
+                    </Text>
+                  </View>
+                  <Ionicons name="arrow-forward" size={18} color="#64748b" />
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={{ color: '#94a3b8', fontSize: 11 }}>Punch OUT Time</Text>
+                    <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: '800', marginTop: 2 }}>
+                      {todayAttendance.timeOut || '-'}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+          ) : (
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'rgba(255,255,255,0.03)', padding: 14, borderRadius: 14 }}>
+              <View style={{ flex: 1, paddingRight: 10 }}>
+                <Text style={{ color: '#f59e0b', fontSize: 13, fontWeight: '800' }}>
+                  ⏳ Aaj Abhi Tak Attendance Nahi Lagi
+                </Text>
+                <Text style={{ color: '#94a3b8', fontSize: 11, marginTop: 4 }}>
+                  Gate par laga QR code scan karke check-in karein
+                </Text>
+              </View>
+              {isApproved && (
+                <TouchableOpacity
+                  onPress={handleOpenGateScanner}
+                  activeOpacity={0.85}
+                  style={{
+                    backgroundColor: '#059669',
+                    paddingHorizontal: 12,
+                    paddingVertical: 8,
+                    borderRadius: 8,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 4,
+                  }}
+                >
+                  <Ionicons name="qr-code" size={14} color="#ffffff" />
+                  <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 12 }}>
+                    Scan Gate
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+        </View>
+
+        {/* ---------------- RECENT ATTENDANCE HISTORY LIST ---------------- */}
+        <View style={{
+          backgroundColor: '#0f172a',
+          borderColor: '#1e293b',
+          borderWidth: 1,
+          borderRadius: 20,
+          padding: 16,
+          marginBottom: 16,
+        }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Ionicons name="calendar" size={17} color="#38bdf8" />
+              <Text style={{ color: '#ffffff', fontSize: 14, fontWeight: '800' }}>
+                Attendance History (हाज़िरी का रिकॉर्ड)
+              </Text>
+            </View>
+            <Text style={{ color: '#64748b', fontSize: 11, fontWeight: '700' }}>
+              {attendanceLogs.length} Records
+            </Text>
+          </View>
+
+          {attendanceLogs && attendanceLogs.length > 0 ? (
+            attendanceLogs.slice(0, 5).map((log: any, idx: number) => (
+              <View 
+                key={log.id || idx}
+                style={{
+                  backgroundColor: '#1e293b',
+                  borderRadius: 12,
+                  padding: 12,
+                  marginBottom: idx === Math.min(attendanceLogs.length, 5) - 1 ? 0 : 8,
+                  borderLeftWidth: 3,
+                  borderLeftColor: log.status === 'COMPLETED' ? '#38bdf8' : '#10b981',
+                }}
+              >
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Ionicons name="calendar-outline" size={13} color="#94a3b8" />
+                    <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 13 }}>
+                      {log.dateString || 'Record'}
+                    </Text>
+                  </View>
+                  <View style={{
+                    backgroundColor: log.status === 'COMPLETED' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                    paddingHorizontal: 6,
+                    paddingVertical: 2,
+                    borderRadius: 4,
+                  }}>
+                    <Text style={{
+                      color: log.status === 'COMPLETED' ? '#38bdf8' : '#10b981',
+                      fontSize: 10,
+                      fontWeight: '800',
+                    }}>
+                      {log.status === 'COMPLETED' ? 'COMPLETED' : 'ACTIVE NOW'}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                  <Text style={{ color: '#94a3b8', fontSize: 12 }}>
+                    ⏰ In: <Text style={{ color: '#ffffff', fontWeight: '700' }}>{log.timeIn}</Text>
+                  </Text>
+                  <Text style={{ color: '#94a3b8', fontSize: 12 }}>
+                    🚪 Out: <Text style={{ color: '#ffffff', fontWeight: '700' }}>{log.timeOut || '-'}</Text>
+                  </Text>
+                  <Text style={{ color: '#10b981', fontSize: 12, fontWeight: '800' }}>
+                    ⏱️ {log.duration}
+                  </Text>
+                </View>
+              </View>
+            ))
+          ) : (
+            <View style={{ paddingVertical: 14, alignItems: 'center' }}>
+              <Text style={{ color: '#64748b', fontSize: 12 }}>
+                Abhi koi attendance record nahi hai. Gate QR scan karein!
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Study Stats Row */}

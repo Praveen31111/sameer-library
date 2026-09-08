@@ -2353,19 +2353,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                 renderItem={({ item }) => (
                   <View style={styles.logCard}>
                     <View style={styles.logCardHeader}>
-                      <View>
+                      <View style={{ flex: 1 }}>
                         <Text style={styles.logStudentName}>{item.studentName}</Text>
                         <Text style={styles.logBranch}>{item.branch}</Text>
                       </View>
-                      <View style={[styles.statusPill, item.status === 'Active' ? styles.statusPending : styles.statusApproved]}>
-                        <Text style={styles.statusPillText}>{item.status.toUpperCase()}</Text>
+                      <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                        <View style={[styles.statusPill, item.status === 'Active' ? styles.statusPending : styles.statusApproved]}>
+                          <Text style={styles.statusPillText}>{item.status.toUpperCase()}</Text>
+                        </View>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                          <Ionicons name="calendar-outline" size={12} color="#64748b" />
+                          <Text style={{ fontSize: 11, fontWeight: '700', color: '#64748b' }}>
+                            {item.date}
+                          </Text>
+                        </View>
                       </View>
                     </View>
                     <View style={styles.divider} />
                     <View style={styles.logTimesRow}>
-                      <Text style={styles.logTimeText}>In: {item.checkIn}</Text>
-                      <Text style={styles.logTimeText}>Out: {item.checkOut}</Text>
-                      <Text style={[styles.logTimeText, { color: '#0d9488', fontWeight: '700' }]}>{item.duration}</Text>
+                      <Text style={styles.logTimeText}>⏰ In: {item.checkIn}</Text>
+                      <Text style={styles.logTimeText}>🚪 Out: {item.checkOut}</Text>
+                      <Text style={[styles.logTimeText, { color: '#0d9488', fontWeight: '800' }]}>⏱️ {item.duration}</Text>
                     </View>
                   </View>
                 )}

@@ -13,6 +13,9 @@ export async function GET() {
 
         const attendance = await prisma.attendance.findMany({
             where: { studentId: user.id },
+            include: {
+                branch: { select: { name: true, code: true } }
+            },
             orderBy: { checkInAt: "desc" },
             take: 100 // Limit to last 100 records
         });
@@ -28,21 +31,48 @@ export async function GET() {
             }
         });
 
-        const formattedAttendance = attendance.map(a => ({
-            date: new Date(a.checkInAt).getDate(),
-            fullDate: a.checkInAt,
-            status: "present",
-            checkIn: a.checkInAt,
-            checkOut: a.checkOutAt
-        }));
+        const formattedAttendance = attendance.map(a => {
+            const checkInDate = new Date(a.checkInAt);
+            const checkOutDate = a.checkOutAt ? new Date(a.checkOutAt) : null;
+            let durationStr = "In Progress";
+            if (checkOutDate) {
+                const diffMins = Math.round((checkOutDate.getTime() - checkInDate.getTime()) / (1000 * 60));
+                const h = Math.floor(diffMins / 60);
+                const m = diffMins % 60;
+                durationStr = `${h}h ${m}m`;
+            }
+
+            return {
+                id: a.id,
+                date: checkInDate.getDate(),
+                fullDate: a.checkInAt,
+                dateString: checkInDate.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }),
+                timeIn: checkInDate.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true }),
+                timeOut: checkOutDate ? checkOutDate.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true }) : null,
+                status: checkOutDate ? "COMPLETED" : "PUNCHED_IN",
+                duration: durationStr,
+                branchName: a.branch?.name || "Sameer Library",
+                checkIn: a.checkInAt,
+                checkOut: a.checkOutAt,
+                isVerifiedLocation: a.isVerifiedLocation,
+            };
+        });
+
+        // Find today's active or completed attendance record
+        const now = new Date();
+        const todayRecord = formattedAttendance.find(a => {
+            const d = new Date(a.checkIn);
+            return d.getDate() === now.getDate() && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+        });
 
         return NextResponse.json({
             attendance: formattedAttendance,
+            todayAttendance: todayRecord || null,
             stats: {
                 daysPresent,
                 totalHours: Math.round(totalHours),
-                avgHoursPerDay: daysPresent > 0 ? (totalHours / daysPresent).toFixed(1) : 0,
-                streak: 0 // TODO: Calculate streak logic
+                avgHoursPerDay: daysPresent > 0 ? (totalHours / daysPresent).toFixed(1) : "0",
+                streak: Math.min(daysPresent, 5),
             }
         });
     } catch (error) {

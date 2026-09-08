@@ -35,19 +35,31 @@ export async function GET(request: Request) {
             }
         });
 
-        const formattedAttendance = attendance.map(a => ({
-            id: a.id,
-            studentName: a.student.name,
-            studentEmail: a.student.email,
-            branch: a.branch.name,
-            date: new Date(a.checkInAt).toLocaleDateString(),
-            checkIn: new Date(a.checkInAt).toLocaleTimeString(),
-            checkOut: a.checkOutAt ? new Date(a.checkOutAt).toLocaleTimeString() : "-",
-            status: a.checkOutAt ? "Completed" : "Active",
-            duration: a.checkOutAt
-                ? `${Math.round((new Date(a.checkOutAt).getTime() - new Date(a.checkInAt).getTime()) / (1000 * 60))} mins`
-                : "-"
-        }));
+        const formattedAttendance = attendance.map(a => {
+            const inDate = new Date(a.checkInAt);
+            const outDate = a.checkOutAt ? new Date(a.checkOutAt) : null;
+            let durationStr = "In Progress";
+            if (outDate) {
+                const diffMins = Math.round((outDate.getTime() - inDate.getTime()) / (1000 * 60));
+                const h = Math.floor(diffMins / 60);
+                const m = diffMins % 60;
+                durationStr = `${h}h ${m}m`;
+            }
+
+            return {
+                id: a.id,
+                studentName: a.student.name,
+                studentEmail: a.student.email,
+                branch: a.branch.name,
+                date: inDate.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }),
+                checkIn: inDate.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true }),
+                checkOut: outDate ? outDate.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true }) : "-",
+                status: a.checkOutAt ? "Completed" : "Active",
+                duration: durationStr,
+                source: a.source || "QR_CODE",
+                isVerifiedLocation: a.isVerifiedLocation
+            };
+        });
 
         return NextResponse.json({ attendance: formattedAttendance });
     } catch (error) {
