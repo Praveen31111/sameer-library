@@ -57,6 +57,8 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
   const [cameraFacing, setCameraFacing] = useState<'back' | 'front'>('back');
   const [scannedQrToken, setScannedQrToken] = useState<string | null>(null);
   const [capturingSelfie, setCapturingSelfie] = useState(false);
+  const [selfieCountdown, setSelfieCountdown] = useState<number | null>(null);
+  const countdownTimerRef = useRef<any>(null);
   const [calendarData, setCalendarData] = useState<any>(null);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const scanningLock = useRef(false);
@@ -348,7 +350,21 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
     setScannerStep('QR');
     setCameraFacing('back');
     setScannedQrToken(null);
+    setSelfieCountdown(null);
     setShowScanner(true);
+  };
+
+  // Safe scanner close with countdown timer cleanup
+  const handleCloseScanner = () => {
+    if (countdownTimerRef.current) {
+      clearTimeout(countdownTimerRef.current);
+      countdownTimerRef.current = null;
+    }
+    setSelfieCountdown(null);
+    setCapturingSelfie(false);
+    setShowScanner(false);
+    setScannerStep('QR');
+    setCameraFacing('back');
   };
 
   // Step 1: Handle scanned Gate QR Pass (Triggers Front Camera for Step 2)
@@ -361,6 +377,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
       // Seamlessly switch to Step 2: Front Camera Live Selfie Verification
       setCameraFacing('front');
       setScannerStep('SELFIE');
+      setSelfieCountdown(2); // Start 2-second automatic hands-free countdown
     } catch (err: any) {
       console.warn('QR scan transition error:', err);
     } finally {
@@ -370,8 +387,36 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
     }
   };
 
+  // Hands-free auto-capture countdown: Automatically takes selfie and punches attendance
+  useEffect(() => {
+    if (selfieCountdown === null || scannerStep !== 'SELFIE' || !showScanner) {
+      return;
+    }
+
+    if (selfieCountdown > 0) {
+      countdownTimerRef.current = setTimeout(() => {
+        setSelfieCountdown(prev => (prev !== null && prev > 0 ? prev - 1 : 0));
+      }, 1000);
+    } else if (selfieCountdown === 0) {
+      // Auto-trigger hands-free selfie capture & punch!
+      setSelfieCountdown(null);
+      handleCaptureAndPunch(false);
+    }
+
+    return () => {
+      if (countdownTimerRef.current) {
+        clearTimeout(countdownTimerRef.current);
+      }
+    };
+  }, [selfieCountdown, scannerStep, showScanner]);
+
   // Step 2: Capture Front Camera Live Selfie & Submit Attendance (0-Cost, auto-purges in 24h)
   const handleCaptureAndPunch = async (skipSelfie = false) => {
+    if (countdownTimerRef.current) {
+      clearTimeout(countdownTimerRef.current);
+      countdownTimerRef.current = null;
+    }
+    setSelfieCountdown(null);
     if (capturingSelfie) return;
     setCapturingSelfie(true);
 
@@ -416,6 +461,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
       setShowScanner(false);
       setScannerStep('QR');
       setCameraFacing('back');
+      setSelfieCountdown(null);
 
       if (res.success) {
         const checkTime = new Date(res.checkInAt || res.checkOutAt || Date.now()).toLocaleTimeString('en-IN', {
@@ -448,6 +494,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
       setShowScanner(false);
       setScannerStep('QR');
       setCameraFacing('back');
+      setSelfieCountdown(null);
       Alert.alert('Attendance Failed', err.message || 'Location verification or selfie check failed.');
     } finally {
       setCapturingSelfie(false);
@@ -1982,7 +2029,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
       <Modal
         visible={showScanner}
         animationType="slide"
-        onRequestClose={() => setShowScanner(false)}
+        onRequestClose={handleCloseScanner}
       >
         <SafeAreaView style={{ flex: 1, backgroundColor: '#000000' }}>
           <View style={{
@@ -1995,11 +2042,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
             zIndex: 10
           }}>
             <TouchableOpacity
-              onPress={() => {
-                setShowScanner(false);
-                setScannerStep('QR');
-                setCameraFacing('back');
-              }}
+              onPress={handleCloseScanner}
               style={{
                 width: 38,
                 height: 38,
@@ -2012,7 +2055,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
               <Ionicons name="close" size={22} color="#ffffff" />
             </TouchableOpacity>
             <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: '700' }}>
-              {scannerStep === 'QR' ? 'Step 1/2: Scan Gate Pass' : 'Step 2/2: Quick Selfie 🤳'}
+              {scannerStep === 'QR' ? 'Step 1/2: Scan Gate Pass' : 'Step 2/2: Auto Selfie 🤳'}
             </Text>
             <View style={{ width: 38 }} />
           </View>
@@ -2094,24 +2137,72 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
                       ✓ Gate QR Scanned Successfully
                     </Text>
                   </View>
-                  <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: '800', marginTop: 10 }}>
-                    Align your face inside the circle 🧑
+                  <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: '800', marginTop: 10, textAlign: 'center' }}>
+                    {capturingSelfie
+                      ? '📸 Capturing & Punching...'
+                      : selfieCountdown !== null && selfieCountdown > 0
+                      ? `Smile! Auto-punching in ${selfieCountdown}s ⏱️`
+                      : 'Align your face inside the circle 🧑'}
+                  </Text>
+                  <Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: 12, marginTop: 4, textAlign: 'center' }}>
+                    ⚡ Automatic photo & punch — button dabane ki zaroorat nahi hai
                   </Text>
                 </View>
 
-                {/* Face Target Oval */}
+                {/* Face Target Oval with Live Countdown Badge */}
                 <View style={{
                   alignSelf: 'center',
-                  width: 240,
-                  height: 280,
-                  borderRadius: 120,
+                  width: 250,
+                  height: 290,
+                  borderRadius: 125,
                   borderWidth: 3,
-                  borderColor: '#10b981',
+                  borderColor: selfieCountdown === 0 || capturingSelfie ? '#38bdf8' : '#10b981',
                   borderStyle: 'dashed',
                   backgroundColor: 'transparent',
-                }} />
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}>
+                  {selfieCountdown !== null && selfieCountdown > 0 && (
+                    <View style={{
+                      width: 76,
+                      height: 76,
+                      borderRadius: 38,
+                      backgroundColor: 'rgba(16, 185, 129, 0.92)',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderWidth: 3,
+                      borderColor: '#ffffff',
+                      elevation: 6,
+                      shadowColor: '#10b981',
+                      shadowOpacity: 0.5,
+                      shadowRadius: 10,
+                    }}>
+                      <Text style={{ color: '#ffffff', fontSize: 34, fontWeight: '900' }}>
+                        {selfieCountdown}
+                      </Text>
+                    </View>
+                  )}
+                  {(selfieCountdown === 0 || capturingSelfie) && (
+                    <View style={{
+                      backgroundColor: 'rgba(15, 23, 42, 0.85)',
+                      paddingHorizontal: 18,
+                      paddingVertical: 10,
+                      borderRadius: 20,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 8,
+                      borderWidth: 1,
+                      borderColor: '#38bdf8',
+                    }}>
+                      <ActivityIndicator color="#38bdf8" size="small" />
+                      <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 14 }}>
+                        📸 Capturing & Punching...
+                      </Text>
+                    </View>
+                  )}
+                </View>
 
-                {/* Bottom Capture Buttons */}
+                {/* Bottom Capture / Auto Info Area */}
                 <View style={{ paddingHorizontal: 20 }}>
                   <TouchableOpacity
                     onPress={() => handleCaptureAndPunch(false)}
@@ -2137,7 +2228,11 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
                       <Ionicons name="camera" size={22} color="#ffffff" />
                     )}
                     <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 15 }}>
-                      {capturingSelfie ? 'Verifying & Punching...' : 'Take Selfie & Punch Attendance'}
+                      {capturingSelfie
+                        ? 'Verifying & Punching...'
+                        : selfieCountdown !== null && selfieCountdown > 0
+                        ? `Auto-Capturing in ${selfieCountdown}s (Tap to Punch Now)`
+                        : 'Take Selfie & Punch Attendance'}
                     </Text>
                   </TouchableOpacity>
 
