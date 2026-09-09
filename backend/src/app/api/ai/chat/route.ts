@@ -17,12 +17,7 @@ const DEFAULT_PRICING = {
 
 export async function POST(req: Request) {
     try {
-        if (!GEMINI_API_KEY) {
-            return NextResponse.json({
-                success: false,
-                error: "Gemini API key is not configured in backend environment."
-            }, { status: 500 });
-        }
+        const apiKey = process.env.GEMINI_API_KEY || GEMINI_API_KEY;
 
         const body = await req.json();
         const { message, audioBase64, mimeType, mode, conversationHistory } = body;
@@ -271,8 +266,39 @@ ${adminContextStr}
             });
         }
 
-        // 6. Call Google Gemini API (gemini-flash-latest)
-        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
+        // 6. Check if Gemini API key is available or provide instant live database answer
+        if (!apiKey) {
+            const q = (message || "").toLowerCase();
+            let fallbackReply = "";
+            let userTranscript = audioBase64 ? "Aapka aawaz sawal" : message;
+
+            if (q.includes("fee") || q.includes("price") || q.includes("charge") || q.includes("paisa") || q.includes("kitna")) {
+                fallbackReply = `Sameer Library me monthly seat fee abhi ₹${effectivePrice} hai. Isme AC study hall, 5G Wi-Fi aur RO drinking water shaamil hai.`;
+            } else if (q.includes("seat") || q.includes("room") || q.includes("khali") || q.includes("available")) {
+                fallbackReply = `Sameer Library me lagbhag ${availableSeatsEstimate} seats uplabdh hain. Aap Book tab se apni pasandida seat chun sakte hain.`;
+            } else if (q.includes("wifi") || q.includes("wi-fi") || q.includes("password") || q.includes("internet")) {
+                fallbackReply = `Sameer Library me 5G high-speed optical fiber Wi-Fi sabhi enrolled students ke liye bilkul free uplabdh hai.`;
+            } else if (q.includes("time") || q.includes("timing") || q.includes("shift") || q.includes("kab")) {
+                fallbackReply = `Sameer Library me teen shifts uplabdh hain: Morning (8 AM to 2 PM), Evening (2 PM to 8 PM) aur Full Day (8 AM to 10 PM).`;
+            } else if (q.includes("rule") || q.includes("niyam")) {
+                fallbackReply = `Library me strict pin-drop silence banaye rakhein, mobile phones silent rakhein aur khana keval break zone me khayein.`;
+            } else if (user && (user.role === "STUDENT" || mode === "STUDENT")) {
+                fallbackReply = `Aapki admission details database me active hain. Kisi bhi sahayata ke liye aap library counter se sampark kar sakte hain.`;
+            } else {
+                fallbackReply = `Namaste! Sameer Library me aapka swagat hai. Hamare yahan monthly fee ₹${effectivePrice} hai aur AC silent study rooms uplabdh hain.`;
+            }
+
+            return NextResponse.json({
+                success: true,
+                reply: fallbackReply,
+                userTranscript: userTranscript || undefined,
+                actionType: q.includes("seat") || q.includes("book") ? "BOOK_SEAT" : "GENERAL",
+                userName: user?.name || "Student",
+            });
+        }
+
+        // Call Google Gemini API (gemini-flash-latest)
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`;
         
         const geminiRes = await fetch(geminiUrl, {
             method: "POST",
