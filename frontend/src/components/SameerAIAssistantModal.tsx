@@ -15,6 +15,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Speech from 'expo-speech';
+import { Audio } from 'expo-av';
+import * as FileSystem from 'expo-file-system';
 import { apiRequest } from '../services/api';
 
 const { width } = Dimensions.get('window');
@@ -47,6 +49,9 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
   const [isThinking, setIsThinking] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [voiceMuted, setVoiceMuted] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const recordingRef = useRef<Audio.Recording | null>(null);
+  const recordingTimeoutRef = useRef<any>(null);
 
   const scrollViewRef = useRef<ScrollView>(null);
 
@@ -87,10 +92,10 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
     }
   }, [visible]);
 
-  // Voice wave loop animation when AI is speaking or thinking
+  // Voice wave loop animation when AI is speaking, thinking, or recording
   useEffect(() => {
     let animLoop: Animated.CompositeAnimation | null = null;
-    if (isSpeaking || isThinking) {
+    if (isSpeaking || isThinking || isRecording) {
       const createWave = (val: Animated.Value, minH: number, maxH: number, duration: number) => {
         return Animated.loop(
           Animated.sequence([
@@ -101,11 +106,11 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
       };
 
       animLoop = Animated.parallel([
-        createWave(wave1, 8, 30, 300),
-        createWave(wave2, 12, 42, 260),
-        createWave(wave3, 16, 50, 340),
-        createWave(wave4, 10, 36, 280),
-        createWave(wave5, 6, 26, 320),
+        createWave(wave1, 8, isRecording ? 36 : 30, 240),
+        createWave(wave2, 12, isRecording ? 48 : 42, 220),
+        createWave(wave3, 16, isRecording ? 54 : 50, 260),
+        createWave(wave4, 10, isRecording ? 40 : 36, 230),
+        createWave(wave5, 6, isRecording ? 30 : 26, 250),
       ]);
       animLoop.start();
     } else {
@@ -121,12 +126,23 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
     return () => {
       animLoop?.stop();
     };
-  }, [isSpeaking, isThinking]);
+  }, [isSpeaking, isThinking, isRecording]);
 
-  // Stop speech when modal closes
-  const handleClose = () => {
+  // Stop speech and recording when modal closes
+  const handleClose = async () => {
     Speech.stop();
     setIsSpeaking(false);
+    if (recordingTimeoutRef.current) {
+      clearTimeout(recordingTimeoutRef.current);
+      recordingTimeoutRef.current = null;
+    }
+    if (recordingRef.current) {
+      try {
+        await recordingRef.current.stopAndUnloadAsync();
+      } catch (e) {}
+      recordingRef.current = null;
+    }
+    setIsRecording(false);
     onClose();
   };
 
@@ -151,6 +167,113 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
     } catch (e) {
       console.warn('Speech playback warning:', e);
       setIsSpeaking(false);
+    }
+  };
+
+  // Start Voice Recording from Phone Microphone
+  const startVoiceRecording = async () => {
+    try {
+      if (isThinking) return;
+      if (isSpeaking) {
+        Speech.stop();
+        setIsSpeaking(false);
+      }
+
+      const perm = await Audio.requestPermissionsAsync();
+      if (!perm.granted) {
+        alert('Microphone permission zaruri hai bolkar sawal puchne ke liye.');
+        return;
+      }
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+
+      const { recording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      );
+      recordingRef.current = recording;
+      setIsRecording(true);
+
+      // Auto stop after 9 seconds if user forgets
+      recordingTimeoutRef.current = setTimeout(() => {
+        stopVoiceRecording();
+      }, 9000);
+    } catch (e) {
+      console.error('Audio recording start failed:', e);
+      setIsRecording(false);
+    }
+  };
+
+  // Stop Voice Recording and Send to Gemini
+  const stopVoiceRecording = async () => {
+    try {
+      if (recordingTimeoutRef.current) {
+        clearTimeout(recordingTimeoutRef.current);
+        recordingTimeoutRef.current = null;
+      }
+
+      const rec = recordingRef.current;
+      if (!rec) {
+        setIsRecording(false);
+        return;
+      }
+
+      setIsRecording(false);
+      await rec.stopAndUnloadAsync();
+      const uri = rec.getURI();
+      recordingRef.current = null;
+
+      if (!uri) return;
+
+      setIsThinking(true);
+
+      const base64Audio = await FileSystem.readAsStringAsync(uri, {
+        encoding: 'base64',
+      });
+
+      const res = await apiRequest('/ai/chat', {
+        method: 'POST',
+        body: JSON.stringify({
+          audioBase64: base64Audio,
+          mimeType: 'audio/m4a',
+          mode,
+          conversationHistory: messages.slice(-4),
+        }),
+      });
+
+      const userTranscript = res.userTranscript || 'Aapka aawaz sandesh';
+      const userMsg: SameerAIMessage = {
+        id: `user-voice-${Date.now()}`,
+        sender: 'user',
+        text: `🎙️ "${userTranscript}"`,
+        timestamp: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }),
+      };
+
+      const aiReply = res.reply || 'Namaste! Sameer Library me aapka swagat hai.';
+      const aiMsg: SameerAIMessage = {
+        id: `ai-voice-${Date.now()}`,
+        sender: 'ai',
+        text: aiReply,
+        actionType: res.actionType || 'GENERAL',
+        timestamp: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }),
+      };
+
+      setMessages((prev) => [...prev, userMsg, aiMsg]);
+      speakText(aiReply);
+    } catch (err: any) {
+      console.error('Voice send error:', err);
+      const errorMsg: SameerAIMessage = {
+        id: `err-${Date.now()}`,
+        sender: 'ai',
+        text: 'Aapki aawaz theek se sunai nahi di. Kripya mic button dabakar dobara boliye ya type karein.',
+        timestamp: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }),
+      };
+      setMessages((prev) => [...prev, errorMsg]);
+    } finally {
+      setIsThinking(false);
+      setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 150);
     }
   };
 
@@ -291,30 +414,32 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
           </View>
 
           {/* Holographic Voice Visualizer Bar */}
-          <View style={styles.visualizerBar}>
+          <View style={[styles.visualizerBar, isRecording && styles.visualizerBarRecording]}>
             <View style={styles.visualizerLeft}>
               <View
                 style={[
                   styles.statusDot,
-                  { backgroundColor: isSpeaking ? '#10b981' : isThinking ? '#f59e0b' : '#38bdf8' },
+                  { backgroundColor: isRecording ? '#ef4444' : isSpeaking ? '#10b981' : isThinking ? '#f59e0b' : '#38bdf8' },
                 ]}
               />
-              <Text style={styles.visualizerStatusText}>
-                {isSpeaking
+              <Text style={[styles.visualizerStatusText, isRecording && { color: '#fca5a5', fontWeight: '700' }]}>
+                {isRecording
+                  ? '🎙️ Sun raha hoon... Boliye! (Mic dabakar bhejein)'
+                  : isSpeaking
                   ? 'Sameer AI bol raha hai...'
                   : isThinking
                   ? 'Sameer AI soch raha hai...'
-                  : 'Puchiye, Sameer AI ready hai'}
+                  : 'Puchiye ya Mic dabakar boliye, Sameer AI ready hai'}
               </Text>
             </View>
 
             {/* 5-Bar Dancing Sound Wave */}
             <View style={styles.soundWaveWrapper}>
-              <Animated.View style={[styles.soundBar, { height: wave1 }]} />
-              <Animated.View style={[styles.soundBar, { height: wave2 }]} />
-              <Animated.View style={[styles.soundBar, { height: wave3, backgroundColor: '#38bdf8' }]} />
-              <Animated.View style={[styles.soundBar, { height: wave4 }]} />
-              <Animated.View style={[styles.soundBar, { height: wave5 }]} />
+              <Animated.View style={[styles.soundBar, { height: wave1 }, isRecording && { backgroundColor: '#ef4444' }]} />
+              <Animated.View style={[styles.soundBar, { height: wave2 }, isRecording && { backgroundColor: '#f87171' }]} />
+              <Animated.View style={[styles.soundBar, { height: wave3, backgroundColor: isRecording ? '#ef4444' : '#38bdf8' }]} />
+              <Animated.View style={[styles.soundBar, { height: wave4 }, isRecording && { backgroundColor: '#f87171' }]} />
+              <Animated.View style={[styles.soundBar, { height: wave5 }, isRecording && { backgroundColor: '#ef4444' }]} />
             </View>
           </View>
 
@@ -422,25 +547,43 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
             </ScrollView>
           </View>
 
-          {/* Input Bar */}
+          {/* Input Bar with Voice Mic & Text Input */}
           <View style={styles.inputContainer}>
+            {/* Mic Record Button */}
+            <TouchableOpacity
+              onPress={isRecording ? stopVoiceRecording : startVoiceRecording}
+              disabled={isThinking}
+              activeOpacity={0.8}
+              style={[
+                styles.micButton,
+                isRecording && styles.micButtonRecording,
+                isThinking && { opacity: 0.5 },
+              ]}
+            >
+              <Ionicons
+                name={isRecording ? 'stop' : 'mic'}
+                size={20}
+                color="#ffffff"
+              />
+            </TouchableOpacity>
+
             <TextInput
-              style={styles.textInput}
-              placeholder="Sameer AI se kuch bhi puchiye..."
-              placeholderTextColor="#94a3b8"
+              style={[styles.textInput, isRecording && { borderColor: '#ef4444', borderWidth: 1 }]}
+              placeholder={isRecording ? 'Aapki aawaz sun raha hai...' : 'Sawal type karein ya Mic se bole...'}
+              placeholderTextColor={isRecording ? '#ef4444' : '#94a3b8'}
               value={inputText}
               onChangeText={setInputText}
               onSubmitEditing={() => handleSendMessage()}
               returnKeyType="send"
-              editable={!isThinking}
+              editable={!isThinking && !isRecording}
             />
 
             <TouchableOpacity
               onPress={() => handleSendMessage()}
-              disabled={!inputText.trim() || isThinking}
+              disabled={!inputText.trim() || isThinking || isRecording}
               style={[
                 styles.sendButton,
-                (!inputText.trim() || isThinking) && { backgroundColor: '#cbd5e1' },
+                (!inputText.trim() || isThinking || isRecording) && { backgroundColor: '#cbd5e1' },
               ]}
             >
               <Ionicons name="arrow-up" size={20} color="#ffffff" />
@@ -563,6 +706,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  visualizerBarRecording: {
+    backgroundColor: '#450a0a',
+    borderBottomWidth: 1,
+    borderBottomColor: '#dc2626',
   },
   visualizerLeft: {
     flexDirection: 'row',
@@ -724,6 +872,25 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     fontSize: 14,
     color: '#0f172a',
+  },
+  micButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#0f172a',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#38bdf8',
+  },
+  micButtonRecording: {
+    backgroundColor: '#ef4444',
+    borderColor: '#fca5a5',
+    transform: [{ scale: 1.08 }],
+    shadowColor: '#ef4444',
+    shadowOpacity: 0.8,
+    shadowRadius: 10,
+    elevation: 8,
   },
   sendButton: {
     width: 42,

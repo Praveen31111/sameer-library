@@ -25,12 +25,12 @@ export async function POST(req: Request) {
         }
 
         const body = await req.json();
-        const { message, mode, conversationHistory } = body;
+        const { message, audioBase64, mimeType, mode, conversationHistory } = body;
 
-        if (!message || typeof message !== "string" || message.trim().length === 0) {
+        if ((!message || typeof message !== "string" || message.trim().length === 0) && !audioBase64) {
             return NextResponse.json({
                 success: false,
-                error: "Message is required"
+                error: "Message or voice audio is required"
             }, { status: 400 });
         }
 
@@ -248,11 +248,28 @@ ${adminContextStr}
             });
         }
 
-        // Append current user message
-        contents.push({
-            role: "user",
-            parts: [{ text: message }]
-        });
+        // Handle Audio Voice Query OR Text Query
+        if (audioBase64) {
+            contents.push({
+                role: "user",
+                parts: [
+                    {
+                        inline_data: {
+                            mime_type: mimeType || "audio/m4a",
+                            data: audioBase64
+                        }
+                    },
+                    {
+                        text: "A student just spoke this voice question to Sameer AI. In your response:\n1. On the first line, write 'TRANSCRIPT: <exact short text of what student asked in Hindi/English>'\n2. On the next line, write 'ANSWER: <your friendly concise answer according to Sameer Library rules>'"
+                    }
+                ]
+            });
+        } else {
+            contents.push({
+                role: "user",
+                parts: [{ text: message }]
+            });
+        }
 
         // 6. Call Google Gemini API (gemini-flash-latest)
         const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
@@ -286,10 +303,28 @@ ${adminContextStr}
             });
         }
 
-        const replyRaw = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
-        const reply = replyRaw
-            ? replyRaw.replace(/\*\*/g, '').replace(/###/g, '').replace(/[\*•]/g, '').trim()
-            : `Namaste! Sameer Library me aapka swagat hai. Aap library timing, fees ya seat booking ke bare me puch sakte hain.`;
+        const replyRaw = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        let reply = "";
+        let userTranscript = "";
+
+        if (audioBase64) {
+            if (replyRaw.includes("TRANSCRIPT:") && replyRaw.includes("ANSWER:")) {
+                const parts = replyRaw.split("ANSWER:");
+                userTranscript = parts[0].replace("TRANSCRIPT:", "").trim();
+                reply = parts[1].trim();
+            } else if (replyRaw.includes("ANSWER:")) {
+                const answerIdx = replyRaw.indexOf("ANSWER:");
+                reply = replyRaw.substring(answerIdx + 7).trim();
+                userTranscript = "Voice query";
+            } else {
+                reply = replyRaw || "Namaste! Main aapki aawaz samajh gaya hoon.";
+                userTranscript = "Voice audio";
+            }
+        } else {
+            reply = replyRaw || `Namaste! Sameer Library me aapka swagat hai. Aap library timing, fees ya seat booking ke bare me puch sakte hain.`;
+        }
+
+        reply = reply.replace(/\*\*/g, '').replace(/###/g, '').replace(/[\*•]/g, '').trim();
 
         // Action recommendation chips (e.g. for CTAs)
         const actionType = reply.toLowerCase().includes("book") || reply.toLowerCase().includes("seat")
@@ -301,6 +336,7 @@ ${adminContextStr}
         return NextResponse.json({
             success: true,
             reply,
+            userTranscript: userTranscript || undefined,
             actionType,
             userName: user?.name || "Student",
         });
