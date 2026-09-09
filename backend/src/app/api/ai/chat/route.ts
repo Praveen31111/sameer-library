@@ -329,7 +329,12 @@ ${adminContextStr}
             });
         }
 
-        const replyRaw = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        const candidateParts = geminiData.candidates?.[0]?.content?.parts || [];
+        const replyRaw = candidateParts
+            .map((p: any) => p.text || "")
+            .filter(Boolean)
+            .join("\n")
+            .trim();
         let reply = "";
         let userTranscript = "";
 

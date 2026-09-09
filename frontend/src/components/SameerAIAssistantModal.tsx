@@ -16,7 +16,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as Speech from 'expo-speech';
 import { Audio } from 'expo-av';
-import * as FileSystem from 'expo-file-system';
+import { File } from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { apiRequest } from '../services/api';
 
 const { width } = Dimensions.get('window');
@@ -334,15 +335,29 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
 
       setIsThinking(true);
 
-      const base64Audio = await FileSystem.readAsStringAsync(uri, {
-        encoding: 'base64',
-      });
+      let base64Audio = '';
+      try {
+        const audioFile = new File(uri);
+        base64Audio = await audioFile.base64();
+      } catch (fileErr) {
+        // Fallback to legacy FileSystem module
+        base64Audio = await FileSystem.readAsStringAsync(uri, {
+          encoding: FileSystem.EncodingType?.Base64 || 'base64',
+        });
+      }
+
+      if (!base64Audio) {
+        throw new Error('Recorded audio could not be converted to base64');
+      }
+
+      const fileExt = uri.split('.').pop()?.toLowerCase();
+      const detectedMimeType = fileExt === 'mp4' || fileExt === 'm4a' ? 'audio/mp4' : 'audio/m4a';
 
       const res = await apiRequest('/ai/chat', {
         method: 'POST',
         body: JSON.stringify({
           audioBase64: base64Audio,
-          mimeType: 'audio/m4a',
+          mimeType: detectedMimeType,
           mode,
           conversationHistory: messages.slice(-4),
         }),
@@ -376,7 +391,7 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
         }
       });
     } catch (err: any) {
-      console.error('Voice send error:', err);
+      console.warn('Voice send error:', err);
       const errorMsg: SameerAIMessage = {
         id: `err-${Date.now()}`,
         sender: 'ai',
