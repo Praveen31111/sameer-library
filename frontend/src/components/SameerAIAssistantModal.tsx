@@ -50,10 +50,47 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [voiceMuted, setVoiceMuted] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [handsFreeMode, setHandsFreeMode] = useState(true);
+
   const recordingRef = useRef<Audio.Recording | null>(null);
   const recordingTimeoutRef = useRef<any>(null);
+  const handsFreeModeRef = useRef(true);
+  const visibleRef = useRef(visible);
+  const isProcessingVoiceRef = useRef(false);
+  const speechStartedRef = useRef(false);
+  const silenceMsRef = useRef(0);
+  const lastDurationMillisRef = useRef(0);
+  const autoListenTimerRef = useRef<any>(null);
 
   const scrollViewRef = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    handsFreeModeRef.current = handsFreeMode;
+  }, [handsFreeMode]);
+
+  useEffect(() => {
+    visibleRef.current = visible;
+    if (!visible) {
+      if (autoListenTimerRef.current) {
+        clearTimeout(autoListenTimerRef.current);
+        autoListenTimerRef.current = null;
+      }
+      if (recordingTimeoutRef.current) {
+        clearTimeout(recordingTimeoutRef.current);
+        recordingTimeoutRef.current = null;
+      }
+      if (recordingRef.current) {
+        try {
+          recordingRef.current.stopAndUnloadAsync();
+        } catch (e) {}
+        recordingRef.current = null;
+      }
+      Speech.stop();
+      setIsSpeaking(false);
+      setIsRecording(false);
+      isProcessingVoiceRef.current = false;
+    }
+  }, [visible]);
 
   // Sound wave bar animations
   const wave1 = useRef(new Animated.Value(10)).current;
@@ -130,12 +167,17 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
 
   // Stop speech and recording when modal closes
   const handleClose = async () => {
-    Speech.stop();
-    setIsSpeaking(false);
+    visibleRef.current = false;
+    if (autoListenTimerRef.current) {
+      clearTimeout(autoListenTimerRef.current);
+      autoListenTimerRef.current = null;
+    }
     if (recordingTimeoutRef.current) {
       clearTimeout(recordingTimeoutRef.current);
       recordingTimeoutRef.current = null;
     }
+    Speech.stop();
+    setIsSpeaking(false);
     if (recordingRef.current) {
       try {
         await recordingRef.current.stopAndUnloadAsync();
@@ -143,13 +185,17 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
       recordingRef.current = null;
     }
     setIsRecording(false);
+    isProcessingVoiceRef.current = false;
     onClose();
   };
 
-  // Speak AI Text using native Indian English / Hindi voice
-  const speakText = async (text: string) => {
+  // Speak AI Text using native Indian English / Hindi voice with finished callback
+  const speakText = async (text: string, onSpeechFinished?: () => void) => {
     try {
-      if (voiceMuted) return;
+      if (voiceMuted) {
+        onSpeechFinished?.();
+        return;
+      }
       await Speech.stop();
       setIsSpeaking(true);
 
@@ -160,23 +206,37 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
         language: 'hi-IN',
         pitch: 1.0,
         rate: 0.95,
-        onDone: () => setIsSpeaking(false),
-        onStopped: () => setIsSpeaking(false),
-        onError: () => setIsSpeaking(false),
+        onDone: () => {
+          setIsSpeaking(false);
+          onSpeechFinished?.();
+        },
+        onStopped: () => {
+          setIsSpeaking(false);
+        },
+        onError: () => {
+          setIsSpeaking(false);
+          onSpeechFinished?.();
+        },
       });
     } catch (e) {
       console.warn('Speech playback warning:', e);
       setIsSpeaking(false);
+      onSpeechFinished?.();
     }
   };
 
-  // Start Voice Recording from Phone Microphone
+  // Start Voice Recording from Phone Microphone with live silence detection
   const startVoiceRecording = async () => {
     try {
-      if (isThinking) return;
+      if (isThinking || isProcessingVoiceRef.current || !visibleRef.current) return;
       if (isSpeaking) {
         Speech.stop();
         setIsSpeaking(false);
+      }
+
+      if (autoListenTimerRef.current) {
+        clearTimeout(autoListenTimerRef.current);
+        autoListenTimerRef.current = null;
       }
 
       const perm = await Audio.requestPermissionsAsync();
@@ -190,16 +250,52 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
         playsInSilentModeIOS: true,
       });
 
-      const { recording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
+      speechStartedRef.current = false;
+      silenceMsRef.current = 0;
+      lastDurationMillisRef.current = 0;
+
+      const recording = new Audio.Recording();
+      await recording.prepareToRecordAsync({
+        ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
+        isMeteringEnabled: true,
+      });
+
+      recording.setOnRecordingStatusUpdate((status) => {
+        if (!status.isRecording || !status.canRecord) return;
+
+        const duration = status.durationMillis;
+        const delta = duration - (lastDurationMillisRef.current || duration);
+        lastDurationMillisRef.current = duration;
+
+        const metering = status.metering ?? -160;
+
+        // Metering threshold: speech is typically > -38 dB
+        if (metering > -38) {
+          speechStartedRef.current = true;
+          silenceMsRef.current = 0;
+        } else if (speechStartedRef.current) {
+          silenceMsRef.current += (delta > 0 ? delta : 200);
+
+          // If student spoke and then was silent for 1.8 seconds, auto-stop and send!
+          if (silenceMsRef.current >= 1800 && !isProcessingVoiceRef.current) {
+            stopVoiceRecording();
+          }
+        }
+      });
+
+      await recording.setProgressUpdateInterval(200);
+      await recording.startAsync();
+
       recordingRef.current = recording;
       setIsRecording(true);
 
-      // Auto stop after 9 seconds if user forgets
+      // Max safety timeout: 10 seconds fallback
+      if (recordingTimeoutRef.current) clearTimeout(recordingTimeoutRef.current);
       recordingTimeoutRef.current = setTimeout(() => {
-        stopVoiceRecording();
-      }, 9000);
+        if (recordingRef.current && !isProcessingVoiceRef.current) {
+          stopVoiceRecording();
+        }
+      }, 10000);
     } catch (e) {
       console.error('Audio recording start failed:', e);
       setIsRecording(false);
@@ -208,6 +304,9 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
 
   // Stop Voice Recording and Send to Gemini
   const stopVoiceRecording = async () => {
+    if (isProcessingVoiceRef.current) return;
+    isProcessingVoiceRef.current = true;
+
     try {
       if (recordingTimeoutRef.current) {
         clearTimeout(recordingTimeoutRef.current);
@@ -217,15 +316,21 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
       const rec = recordingRef.current;
       if (!rec) {
         setIsRecording(false);
+        isProcessingVoiceRef.current = false;
         return;
       }
 
       setIsRecording(false);
-      await rec.stopAndUnloadAsync();
+      try {
+        await rec.stopAndUnloadAsync();
+      } catch (e) {}
       const uri = rec.getURI();
       recordingRef.current = null;
 
-      if (!uri) return;
+      if (!uri) {
+        isProcessingVoiceRef.current = false;
+        return;
+      }
 
       setIsThinking(true);
 
@@ -261,18 +366,34 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
       };
 
       setMessages((prev) => [...prev, userMsg, aiMsg]);
-      speakText(aiReply);
+
+      // Automatically speak the response and resume listening if handsFreeMode is active!
+      speakText(aiReply, () => {
+        if (handsFreeModeRef.current && visibleRef.current) {
+          autoListenTimerRef.current = setTimeout(() => {
+            startVoiceRecording();
+          }, 600);
+        }
+      });
     } catch (err: any) {
       console.error('Voice send error:', err);
       const errorMsg: SameerAIMessage = {
         id: `err-${Date.now()}`,
         sender: 'ai',
-        text: 'Aapki aawaz theek se sunai nahi di. Kripya mic button dabakar dobara boliye ya type karein.',
+        text: 'Aapki aawaz theek se sunai nahi di. Kripya dobara boliye.',
         timestamp: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }),
       };
       setMessages((prev) => [...prev, errorMsg]);
+
+      // Retry auto-listen if in hands-free mode
+      if (handsFreeModeRef.current && visibleRef.current) {
+        autoListenTimerRef.current = setTimeout(() => {
+          startVoiceRecording();
+        }, 1200);
+      }
     } finally {
       setIsThinking(false);
+      isProcessingVoiceRef.current = false;
       setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 150);
     }
   };
@@ -388,6 +509,28 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
             </View>
 
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              {/* Hands-Free Live Call Toggle */}
+              <TouchableOpacity
+                onPress={() => {
+                  const nextVal = !handsFreeMode;
+                  setHandsFreeMode(nextVal);
+                  if (!nextVal && autoListenTimerRef.current) {
+                    clearTimeout(autoListenTimerRef.current);
+                    autoListenTimerRef.current = null;
+                  }
+                }}
+                style={[styles.handsFreeHeaderBtn, handsFreeMode && styles.handsFreeHeaderBtnActive]}
+              >
+                <Ionicons
+                  name={handsFreeMode ? 'infinite' : 'radio-button-off'}
+                  size={14}
+                  color={handsFreeMode ? '#34d399' : '#94a3b8'}
+                />
+                <Text style={[styles.handsFreeHeaderText, handsFreeMode && styles.handsFreeHeaderTextActive]}>
+                  {handsFreeMode ? 'Auto-Voice' : 'Manual'}
+                </Text>
+              </TouchableOpacity>
+
               {/* Mute/Unmute Speech Toggle */}
               <TouchableOpacity
                 onPress={() => {
@@ -424,12 +567,12 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
               />
               <Text style={[styles.visualizerStatusText, isRecording && { color: '#fca5a5', fontWeight: '700' }]}>
                 {isRecording
-                  ? '🎙️ Sun raha hoon... Boliye! (Mic dabakar bhejein)'
+                  ? (handsFreeMode ? '🎙️ Sun raha hoon... Boliye (Rukte hi answer milega)' : '🎙️ Sun raha hoon... Boliye')
                   : isSpeaking
                   ? 'Sameer AI bol raha hai...'
                   : isThinking
                   ? 'Sameer AI soch raha hai...'
-                  : 'Puchiye ya Mic dabakar boliye, Sameer AI ready hai'}
+                  : (handsFreeMode ? '🔄 Hands-Free Call ON: Bolna shuru karein' : 'Puchiye ya Mic dabakar boliye')}
               </Text>
             </View>
 
@@ -547,29 +690,63 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
             </ScrollView>
           </View>
 
+          {/* Hands-Free Live Call Helper Banner */}
+          {handsFreeMode && (
+            <View style={styles.handsFreeLiveNotice}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+                <View style={[styles.pulseLiveDot, isRecording && { backgroundColor: '#ef4444' }]} />
+                <Text style={styles.handsFreeLiveText}>
+                  {isRecording
+                    ? '🎙️ Sun raha hoon... Bolte rahiye (Rukne par turant answer milega)'
+                    : isThinking
+                    ? '⚡ Jawab taiyar ho raha hai...'
+                    : isSpeaking
+                    ? '🔊 Sameer AI bol raha hai... (Khatam hote hi fir sunega)'
+                    : '🔄 Hands-Free Call ON: Mic dabayein aur lagatar baat karein'}
+                </Text>
+              </View>
+            </View>
+          )}
+
           {/* Input Bar with Voice Mic & Text Input */}
           <View style={styles.inputContainer}>
             {/* Mic Record Button */}
             <TouchableOpacity
-              onPress={isRecording ? stopVoiceRecording : startVoiceRecording}
+              onPress={() => {
+                if (isRecording) {
+                  stopVoiceRecording();
+                } else {
+                  setHandsFreeMode(true);
+                  startVoiceRecording();
+                }
+              }}
               disabled={isThinking}
               activeOpacity={0.8}
               style={[
                 styles.micButton,
+                handsFreeMode && styles.micButtonHandsFree,
                 isRecording && styles.micButtonRecording,
                 isThinking && { opacity: 0.5 },
               ]}
             >
               <Ionicons
                 name={isRecording ? 'stop' : 'mic'}
-                size={20}
+                size={21}
                 color="#ffffff"
               />
             </TouchableOpacity>
 
             <TextInput
               style={[styles.textInput, isRecording && { borderColor: '#ef4444', borderWidth: 1 }]}
-              placeholder={isRecording ? 'Aapki aawaz sun raha hai...' : 'Sawal type karein ya Mic se bole...'}
+              placeholder={
+                isRecording
+                  ? '🎙️ Sun raha hoon... Boliye'
+                  : isSpeaking
+                  ? '🔊 Sameer AI bol raha hai...'
+                  : handsFreeMode
+                  ? '🔄 Bolna shuru karein ya type karein...'
+                  : 'Sawal type karein ya Mic dabayein...'
+              }
               placeholderTextColor={isRecording ? '#ef4444' : '#94a3b8'}
               value={inputText}
               onChangeText={setInputText}
@@ -690,6 +867,29 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
     fontSize: 11,
     fontWeight: '500',
+  },
+  handsFreeHeaderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderWidth: 1,
+    borderColor: '#334155',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 14,
+  },
+  handsFreeHeaderBtnActive: {
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    borderColor: '#10b981',
+  },
+  handsFreeHeaderText: {
+    color: '#94a3b8',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  handsFreeHeaderTextActive: {
+    color: '#34d399',
   },
   iconButton: {
     width: 34,
@@ -873,6 +1073,27 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#0f172a',
   },
+  handsFreeLiveNotice: {
+    backgroundColor: '#0f172a',
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderTopWidth: 1,
+    borderTopColor: '#1e293b',
+  },
+  pulseLiveDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: '#10b981',
+  },
+  handsFreeLiveText: {
+    color: '#cbd5e1',
+    fontSize: 11,
+    fontWeight: '600',
+  },
   micButton: {
     width: 42,
     height: 42,
@@ -882,6 +1103,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1.5,
     borderColor: '#38bdf8',
+  },
+  micButtonHandsFree: {
+    borderColor: '#10b981',
+    backgroundColor: '#064e3b',
+    shadowColor: '#10b981',
+    shadowOpacity: 0.5,
+    shadowRadius: 6,
+    elevation: 4,
   },
   micButtonRecording: {
     backgroundColor: '#ef4444',
