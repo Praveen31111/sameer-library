@@ -27,6 +27,7 @@ import * as Location from 'expo-location';
 import { useAuth } from '../context/AuthContext';
 import { apiRequest } from '../services/api';
 import { COLORS } from '../utils/constants';
+import { SameerAIAssistantModal, FloatingSameerAIOrb } from '../components/SameerAIAssistantModal';
 
 interface AdminDashboardProps {
   onNavigate: (screen: 'Home' | 'Login' | 'Register' | 'StudentDashboard' | 'AdminDashboard') => void;
@@ -179,10 +180,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
   const [attendanceLogs, setAttendanceLogs] = useState<any[]>([]);
   const [paymentLogs, setPaymentLogs] = useState<any[]>([]);
   const [selectedSelfiePreview, setSelectedSelfiePreview] = useState<any>(null);
+  const [showAIAssistant, setShowAIAssistant] = useState(false);
 
   // Hardware Back Button Navigation Handler (Step-by-step back)
   useEffect(() => {
     const handleHardwareBack = () => {
+      if (showAIAssistant) {
+        setShowAIAssistant(false);
+        return true;
+      }
       if (selectedSelfiePreview) {
         setSelectedSelfiePreview(null);
         return true;
@@ -3916,6 +3922,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
           </View>
         </View>
       </Modal>
+
+      {/* Floating Sameer AI Intelligence Orb */}
+      <FloatingSameerAIOrb
+        onPress={() => setShowAIAssistant(true)}
+        label="Sameer AI"
+      />
+
+      {/* Sameer AI Voice & Chat Assistant Modal */}
+      <SameerAIAssistantModal
+        visible={showAIAssistant}
+        onClose={() => setShowAIAssistant(false)}
+        mode="ADMIN"
+        onActionClick={(action) => {
+          if (action === 'PAY_DUES') {
+            setActiveTab('Dues');
+          } else if (action === 'BOOK_SEAT') {
+            setActiveTab('Bookings');
+          }
+        }}
+      />
     </SafeAreaView>
   );
 };

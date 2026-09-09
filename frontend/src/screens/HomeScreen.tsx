@@ -7,6 +7,7 @@ import { BottomNavBar, BottomNavTab } from '../components/BottomNavBar';
 import { useAuth } from '../context/AuthContext';
 import { apiRequest } from '../services/api';
 import { COLORS } from '../utils/constants';
+import { SameerAIAssistantModal, FloatingSameerAIOrb } from '../components/SameerAIAssistantModal';
 
 interface HomeScreenProps {
   onNavigate: (screen: 'Home' | 'Login' | 'Register' | 'StudentDashboard' | 'AdminDashboard') => void;
@@ -18,6 +19,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
   const { user } = useAuth();
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [activeBottomTab, setActiveBottomTab] = useState<BottomNavTab>('Home');
+  const [showAIAssistant, setShowAIAssistant] = useState(false);
   
   // Dynamic Branches from Database
   const [branches, setBranches] = useState<any[]>([]);
@@ -413,6 +415,24 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigate }) => {
 
       {/* Bottom Navigation Bar */}
       <BottomNavBar activeTab={activeBottomTab} onTabPress={handleBottomTabPress} />
+
+      {/* Floating Sameer AI Assistant Orb */}
+      <FloatingSameerAIOrb
+        onPress={() => setShowAIAssistant(true)}
+        label="Sameer AI"
+      />
+
+      {/* Sameer AI Voice & Chat Assistant Modal */}
+      <SameerAIAssistantModal
+        visible={showAIAssistant}
+        onClose={() => setShowAIAssistant(false)}
+        mode="PUBLIC"
+        onActionClick={(action) => {
+          if (action === 'BOOK_SEAT') {
+            onNavigate(user ? 'StudentDashboard' : 'Register');
+          }
+        }}
+      />
     </View>
   );
 };

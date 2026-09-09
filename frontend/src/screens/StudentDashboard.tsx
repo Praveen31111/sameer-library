@@ -8,6 +8,7 @@ import { BottomNavBar, BottomNavTab } from '../components/BottomNavBar';
 import { COLORS } from '../utils/constants';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Location from 'expo-location';
+import { SameerAIAssistantModal, FloatingSameerAIOrb } from '../components/SameerAIAssistantModal';
 
 interface StudentDashboardProps {
   onNavigate: (screen: 'Home' | 'Login' | 'Register' | 'StudentDashboard' | 'AdminDashboard') => void;
@@ -63,6 +64,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const scanningLock = useRef(false);
   const cameraRef = useRef<any>(null);
+  const [showAIAssistant, setShowAIAssistant] = useState(false);
 
   // Dynamic Pricing & Discount Offer State (Monthly-only)
   const [pricingConfig, setPricingConfig] = useState<any>({
@@ -714,6 +716,63 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
           <Text style={styles.greetingTitle}>Good morning, {user?.name?.split(' ')[0] || 'Student'} 👋</Text>
           <Text style={styles.greetingSubtitle}>Here is your study schedule for today.</Text>
         </View>
+
+        {/* Sameer AI Voice Assistant Card */}
+        <TouchableOpacity
+          onPress={() => setShowAIAssistant(true)}
+          activeOpacity={0.88}
+          style={{
+            backgroundColor: '#0f172a',
+            borderRadius: 18,
+            padding: 16,
+            marginBottom: 16,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            borderWidth: 1.5,
+            borderColor: '#10b981',
+            shadowColor: '#10b981',
+            shadowOpacity: 0.35,
+            shadowRadius: 8,
+            elevation: 4,
+          }}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
+            <View style={{
+              width: 42,
+              height: 42,
+              borderRadius: 21,
+              backgroundColor: '#059669',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}>
+              <Ionicons name="sparkles" size={20} color="#ffffff" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 15 }}>Sameer AI Sathi</Text>
+                <View style={{ backgroundColor: 'rgba(16, 185, 129, 0.25)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 }}>
+                  <Text style={{ color: '#34d399', fontSize: 10, fontWeight: '800' }}>24x7 VOICE</Text>
+                </View>
+              </View>
+              <Text style={{ color: '#94a3b8', fontSize: 12, marginTop: 2 }}>
+                Puchiye: Seat, Dues, Wi-Fi password ya timing
+              </Text>
+            </View>
+          </View>
+          <View style={{
+            backgroundColor: '#10b981',
+            paddingHorizontal: 12,
+            paddingVertical: 7,
+            borderRadius: 12,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+          }}>
+            <Ionicons name="mic" size={14} color="#ffffff" />
+            <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 12 }}>Puchiye</Text>
+          </View>
+        </TouchableOpacity>
 
         {/* Due Fee Alert Banner */}
         {activeBooking && activeBooking.dueAmount > 0 && (
@@ -2024,6 +2083,27 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
 
       {/* Bottom Navigation Bar */}
       <BottomNavBar activeTab={activeTab} onTabPress={setActiveTab} />
+
+      {/* Floating Sameer AI Assistant Orb */}
+      <FloatingSameerAIOrb
+        onPress={() => setShowAIAssistant(true)}
+        label="Sameer AI"
+      />
+
+      {/* Sameer AI Voice & Chat Assistant Modal */}
+      <SameerAIAssistantModal
+        visible={showAIAssistant}
+        onClose={() => setShowAIAssistant(false)}
+        mode="STUDENT"
+        studentName={user?.name}
+        onActionClick={(action) => {
+          if (action === 'BOOK_SEAT') {
+            setActiveTab('Book');
+          } else if (action === 'PAY_DUES') {
+            setActiveTab('My Bookings');
+          }
+        }}
+      />
 
       {/* Universal Gate Attendance QR Scanner Modal */}
       <Modal
