@@ -28,6 +28,7 @@ import { useAuth } from '../context/AuthContext';
 import { apiRequest } from '../services/api';
 import { COLORS } from '../utils/constants';
 import { SameerAIAssistantModal, FloatingSameerAIOrb } from '../components/SameerAIAssistantModal';
+import { BulkStudentImportModal } from '../components/BulkStudentImportModal';
 
 interface AdminDashboardProps {
   onNavigate: (screen: 'Home' | 'Login' | 'Register' | 'StudentDashboard' | 'AdminDashboard') => void;
@@ -145,6 +146,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
   const [roomsList, setRoomsList] = useState<any[]>([]);
   const [selectedRoom, setSelectedRoom] = useState<any>(null);
   const [roomSeats, setRoomSeats] = useState<any[]>([]);
+  const [bulkImportModalVisible, setBulkImportModalVisible] = useState(false);
 
   // Branch Creation & Edit State
   const [branchModalVisible, setBranchModalVisible] = useState(false);
@@ -1944,21 +1946,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                 <Text style={styles.facilityLevelTitle}>Library Facilities</Text>
               )}
 
-              <TouchableOpacity
-                style={styles.addLevelBtn}
-                onPress={() => {
-                  if (facilityLevel === 'branches') handleOpenBranchModal();
-                  else if (facilityLevel === 'rooms') handleOpenRoomModal();
-                  else if (facilityLevel === 'seats') setAddSeatModal(true);
-                }}
-              >
-                <Ionicons name="add" size={18} color="#ffffff" />
-                <Text style={styles.addLevelBtnText}>
-                  {facilityLevel === 'branches' && 'Add Branch'}
-                  {facilityLevel === 'rooms' && 'Add Room'}
-                  {facilityLevel === 'seats' && 'Add Seats'}
-                </Text>
-              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                <TouchableOpacity
+                  style={[styles.addLevelBtn, { backgroundColor: '#4f46e5' }]}
+                  onPress={() => setBulkImportModalVisible(true)}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="cloud-upload" size={15} color="#ffffff" />
+                  <Text style={styles.addLevelBtnText}>Bulk Import</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.addLevelBtn}
+                  onPress={() => {
+                    if (facilityLevel === 'branches') handleOpenBranchModal();
+                    else if (facilityLevel === 'rooms') handleOpenRoomModal();
+                    else if (facilityLevel === 'seats') setAddSeatModal(true);
+                  }}
+                >
+                  <Ionicons name="add" size={18} color="#ffffff" />
+                  <Text style={styles.addLevelBtnText}>
+                    {facilityLevel === 'branches' && 'Add Branch'}
+                    {facilityLevel === 'rooms' && 'Add Room'}
+                    {facilityLevel === 'seats' && 'Add Seats'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
             {/* LEVEL 1: Branches List */}
@@ -1968,6 +1981,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                 keyExtractor={(item) => item.id}
                 contentContainerStyle={styles.flatListContent}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0d9488" />}
+                ListHeaderComponent={
+                  <TouchableOpacity
+                    style={styles.bulkImportBannerCard}
+                    onPress={() => setBulkImportModalVisible(true)}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.bulkImportBannerIcon}>
+                      <Ionicons name="people" size={24} color="#6366f1" />
+                    </View>
+                    <View style={{ flex: 1, marginLeft: 12 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Text style={styles.bulkImportBannerTitle}>Bulk Student Onboarding</Text>
+                        <View style={styles.bulkImportBadge}>
+                          <Text style={styles.bulkImportBadgeText}>BATCH IMPORT</Text>
+                        </View>
+                      </View>
+                      <Text style={styles.bulkImportBannerSub}>
+                        Existing library students ko Excel/CSV se import karein — seats, fees & dues auto-allot honge.
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color="#6366f1" />
+                  </TouchableOpacity>
+                }
                 renderItem={({ item }) => (
                   <View style={styles.facilityCard}>
                     {item.photo ? (
@@ -3943,6 +3979,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
           }
         }}
       />
+
+      {/* Bulk Student Onboarding & Data Import Modal */}
+      <BulkStudentImportModal
+        visible={bulkImportModalVisible}
+        onClose={() => setBulkImportModalVisible(false)}
+        branches={branchesList}
+        onImportSuccess={() => {
+          fetchStats();
+          fetchBookings(bookingFilter);
+          fetchBranches();
+        }}
+      />
     </SafeAreaView>
   );
 };
@@ -4419,6 +4467,49 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 12,
     fontWeight: '700',
+  },
+  bulkImportBannerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1e1b4b35',
+    borderWidth: 1,
+    borderColor: '#4f46e540',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 16,
+  },
+  bulkImportBannerIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#4f46e520',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#6366f140',
+  },
+  bulkImportBannerTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#f8fafc',
+  },
+  bulkImportBadge: {
+    backgroundColor: '#4f46e5',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  bulkImportBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#ffffff',
+    letterSpacing: 0.5,
+  },
+  bulkImportBannerSub: {
+    fontSize: 12,
+    color: '#94a3b8',
+    marginTop: 3,
+    lineHeight: 16,
   },
   facilityCard: {
     backgroundColor: COLORS.surface,
