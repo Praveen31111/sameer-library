@@ -412,6 +412,10 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
 
       setMessages((prev) => [...prev, userMsg, aiMsg]);
 
+      if (res?.suggestedQuestions && Array.isArray(res.suggestedQuestions) && res.suggestedQuestions.length > 0) {
+        setActiveSuggestions(res.suggestedQuestions);
+      }
+
       // Automatically speak the response and resume listening if handsFreeMode is active!
       speakText(aiReply, () => {
         if (handsFreeModeRef.current && visibleRef.current) {
@@ -481,6 +485,11 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
       };
 
       setMessages((prev) => [...prev, aiMsg]);
+
+      if (res?.suggestedQuestions && Array.isArray(res.suggestedQuestions) && res.suggestedQuestions.length > 0) {
+        setActiveSuggestions(res.suggestedQuestions);
+      }
+
       speakText(aiReply);
     } catch (err: any) {
       console.error('AI chat query error:', err);
@@ -498,7 +507,7 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
   };
 
   // Quick action suggestions based on user mode
-  const quickQuestions =
+  const defaultSuggestions =
     mode === 'ADMIN'
       ? [
           '📊 Kitne students enrolled hain?',
@@ -511,17 +520,19 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
           '🪑 Meri seat number konsi hai?',
           '💵 Mera kitna due payment baki hai?',
           '📶 Wi-Fi password kya hai?',
-          '📅 Meri attendance status kya hai?',
+          '🚻 Washroom facility kaisa hai?',
           '📜 Library rules kya hain?',
         ]
       : [
-          '💰 Monthly fee kitni hai?',
-          '🪑 AC room me seat khali hai kya?',
-          '🕒 Library timing aur shifts?',
-          '📶 Wi-Fi aur RO water facility hai?',
-          '📍 Branch address kya hai?',
-          '📝 Seat book kaise karein?',
+          '💰 Fees kitni hai?',
+          '🪑 Seat availability?',
+          '🕒 Timings & Shifts?',
+          '🚻 Toilet & facilities?',
+          '🔒 CCTV & Privacy safe hai?',
+          '☕ Food & Chai rules?',
         ];
+
+  const [activeSuggestions, setActiveSuggestions] = useState<string[]>(defaultSuggestions);
 
   return (
     <Modal visible={visible} animationType="slide" transparent={true} onRequestClose={handleClose}>
@@ -721,8 +732,13 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
 
           {/* Quick Question Suggestion Chips */}
           <View style={styles.quickChipsWrapper}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 4 }}>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: '#64748b' }}>
+                Aur kuch jaan-na hai? 😄
+              </Text>
+            </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: 16 }}>
-              {quickQuestions.map((q, idx) => (
+              {activeSuggestions.map((q, idx) => (
                 <TouchableOpacity
                   key={idx}
                   onPress={() => handleSendMessage(q)}

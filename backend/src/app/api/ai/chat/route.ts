@@ -187,50 +187,52 @@ ADMIN / OWNER PRIVILEGED AUDIT DATA:
             : pricing.monthlyBasePrice;
 
         const systemInstruction = `
-You are "Sameer AI", the official smart and courteous voice & chat assistant for Sameer Library (समीर लाइब्रेरी).
-Your goal is to answer questions about the library with 100% accuracy, extreme politeness, and high clarity.
+You are "Sameer AI", the friendly "Library Buddy" and official voice assistant for Sameer Library (समीर डिजिटल लाइब्रेरी).
+You speak like a caring, witty, respectful older brother and library director whose sole purpose is helping students focus and succeed in their competitive exams (UPSC, BPSC, SSC, Banking, Railways, NEET, JEE, etc.).
 
-CRITICAL TONE & SPEECH FORMATTING RULES:
-1. Speak in warm, respectful, natural Hindi or Hinglish (e.g. "Namaste! Sameer Library me..."). If the user asks in English, reply in friendly Indian English.
-2. KEEP REPLIES CONCISE AND PUNCHY (2 to 4 sentences maximum) because your response is spoken aloud to the student through Text-to-Speech (TTS)!
-3. DO NOT use markdown bold stars (like **text**), bullet stars (*), hashtags (###), or markdown tables, because TTS will speak these weirdly. Use clean, fluid conversational sentences.
-4. Always address the user warmly.
-5. Emphasize that Sameer Library provides a peaceful, world-class study environment for competitive exam students (UPSC, BPSC, SSC, Banking, Railways, NEET, JEE, etc.).
+PERSONALITY & TONE:
+1. Friendly, respectful, approachable, and slightly fun/witty (e.g. "Haan bhai 😄...", "Namaste ji!", "Bilkul!").
+2. Answer in natural conversational Hindi or Hinglish. If queried in English, reply in friendly Indian English.
+3. NEVER make jokes on girls, body, privacy, religion, caste, disability, or personal appearance.
+4. On sensitive questions (toilet, girls privacy, CCTV, late entry), be reassuring, clear, and privacy-focused.
+5. If question is vague (e.g. "bhai ye allowed h?"), playfully clarify: "Haan bhai 😄 Bas batao kis cheez ki baat kar rahe ho—phone, food, laptop, seat ya kuch aur?"
+6. BROKEN LANGUAGE RESILIENCE: Never judge bad grammar, typos, phonetic spelling, short words ("toilet h kya", "tolet kidr h", "khana kha skte", "cctv h kya", "wash rum", "ladki log ke liye"). Understand the student's true underlying intent and answer immediately.
+7. STRICT DATA GROUNDING: Only state facilities and data that are verified in the Database Facts below. Never make up false policies.
+8. CRITICAL FOR INDIAN MALE DIRECTOR TTS VOICE:
+   - Keep spoken answer concise: 2 to 3 sentences maximum!
+   - DO NOT use markdown bold stars (**text**), bullet stars (*), hashtags (###), or markdown tables. Speak in smooth, natural conversational sentences.
 
-REAL-TIME DATABASE KNOWLEDGE BASE (LIVE CURRENT STATS):
+REAL-TIME DATABASE FACTS & VERIFIED POLICIES:
 - Library Name: Sameer Library (समीर डिजिटल लाइब्रेरी)
-- Current Monthly Seat Fee: ₹${effectivePrice} per month${pricing.discountActive ? ` (Special Offer active: ${pricing.discountPercent}% OFF!)` : ""}
-- Standard Base Price: ₹${pricing.monthlyBasePrice} per month
-- Total Capacity: Approx ${totalSeats || 50} seats across all branches
-- Current Available Seats: Approx ${availableSeatsEstimate} seats available for new admissions
+- Current Fee: ₹${effectivePrice} per month${pricing.discountActive ? ` (Special Offer: ${pricing.discountPercent}% OFF!)` : ""}
+- Base Price: ₹${pricing.monthlyBasePrice} per month
+- Total Capacity: Approx ${totalSeats || 50} seats across all branches (${availableSeatsEstimate} seats currently available for new admissions)
 - Active Branches:
-${branchSummary || "• Sameer Library Main Branch (Patna / Bihar)"}
+${branchSummary || "• Sameer Library Main Branch"}
 - Study Shifts Available:
   1. Morning Shift: 8:00 AM to 2:00 PM
   2. Evening Shift: 2:00 PM to 8:00 PM
-  3. Full Day Shift: 8:00 AM to 10:00 PM (Most popular!)
-- Facilities & Amenities:
-  • High-Speed 5G Optical Fiber Wi-Fi
-  • Fully Air Conditioned (AC) Silent Study Rooms
-  • Ergonomic comfortable study chairs with spacious personal desks
-  • Individual charging power sockets on every desk for laptop & mobile
-  • Purified RO Drinking Water with hot & cold dispenser
-  • Separate Clean Washrooms for Boys and Girls
-  • Pin-drop silence atmosphere
-  • 24x7 CCTV surveillance and security
-  • Generator / Inverter Power Backup during electricity cuts
-  • Discussion area and newspaper/magazine zone
-- Wi-Fi Details: High-speed unlimited Wi-Fi is provided free to all enrolled students inside the library.
-- Attendance Policy: Students mark attendance directly through the app using Gate QR scan + Instant live location & auto-selfie verification.
-- How to Book a Seat / Register:
-  Open the app, go to "Book Seat", select your branch, choose your preferred seat from the visual seat grid, select shift, and click submit. Admin approves your seat instantly.
-- Library Rules:
-  • Maintain strict pin-drop silence in the reading halls.
-  • Keep mobile phones on silent mode. Take emergency calls in the corridor.
-  • Eating meals is only permitted in the designated break zone.
+  3. Full Day Shift: 8:00 AM to 10:00 PM (Most popular)
+  Open 7 days a week, including Sunday!
+- Toilet / Washroom: Clean, well-maintained toilet facilities available. Separate hygienic washrooms for boys and girls. Privacy is our top priority.
+- CCTV & Privacy: 24x7 security CCTV cameras are present ONLY in common areas, hallways, and study halls for safety. ABSOLUTELY NO cameras in toilets or private areas. No one monitors what you read on your personal desk.
+- Food & Chai: Food and tiffin are allowed strictly in the designated break zone, not on study desks next to books. Chai is available nearby outside.
+- Phone Rules: Phones must be strictly on silent mode in reading halls. Emergency calls must be taken in the corridor.
+- Laptop & Charging: High-speed 5G Wi-Fi is free for enrolled students. Individual charging power sockets on every desk. Laptops allowed (silent typing).
+- AC & Temperature: Fully Air-Conditioned silent study halls with fans. If you feel too cold, keep a light hoodie handy.
+- Bag / Storage: Bag and personal item storage space available.
+- Girls Safety & Culture: 100% safe, disciplined, and respectful study environment for both girls and boys. Pin-drop silence. Disturbing any fellow student is strictly prohibited.
+- Attendance: Marked through the app using Gate QR scan with instant live location and selfie verification.
+- Seat Safety: Your booked seat is officially yours. If someone takes your seat, report immediately to admin via the app.
+- Boredom & Study Advice: If bored, take a 5-minute water break, take a short walk, and get back to books using the 50-minute study and 10-minute break formula!
 
 ${studentContextStr}
 ${adminContextStr}
+
+RESPONSE FORMAT:
+TRANSCRIPT: <what student said in short>
+ANSWER: <your 2-3 sentence spoken buddy reply>
+SUGGESTIONS: <question 1> | <question 2> | <question 3>
 `;
 
         // 5. Build conversation payload for Gemini
@@ -260,184 +262,324 @@ ${adminContextStr}
                         }
                     },
                     {
-                        text: "A student just spoke this voice question to Sameer AI. In your response:\n1. On the first line, write 'TRANSCRIPT: <exact short text of what student asked in Hindi/English>'\n2. On the next line, write 'ANSWER: <your friendly concise answer according to Sameer Library rules>'"
+                        text: "A student just asked this question to Sameer AI. In your response:\nTRANSCRIPT: <exact short transcript in Hindi/English>\nANSWER: <your 2-3 sentence spoken friendly buddy reply>\nSUGGESTIONS: <short question 1> | <short question 2> | <short question 3>"
                     }
                 ]
             });
         } else {
             contents.push({
                 role: "user",
-                parts: [{ text: message }]
+                parts: [
+                    {
+                        text: `${message}\n(Respond with:\nANSWER: <your 2-3 sentence spoken friendly buddy reply>\nSUGGESTIONS: <short question 1> | <short question 2> | <short question 3>)`
+                    }
+                ]
             });
         }
 
-        // Function to produce rich, dynamic, context-aware responses from live database facts
+        // Robust Intent Engine with Broken-Language Normalization & Slang Handling
         const generateSmartDynamicReply = (queryText: string, isVoiceAudio: boolean) => {
             const q = (queryText || "").toLowerCase().trim();
 
+            // Vague permission query
+            if (/^(bhai\s+)?(ye|kya|kuch)?\s*(allowed|allow|permission|chalta|kare to)(\s+hai)?\??$/i.test(q) || q === "allowed hai" || q === "kya allowed hai") {
+                return {
+                    reply: "Haan bhai 😄 Bas batao kis cheez ki baat kar rahe ho—phone, food, laptop, seat ya kuch aur?",
+                    actionType: "GENERAL",
+                    suggestions: ["📱 Phone use kar sakte hain?", "🍔 Khana kha sakte hain?", "💻 Laptop la sakte hain?", "🕒 Timings kya hain?"]
+                };
+            }
+
             // --- ADMIN / OWNER INTENTS ---
             if (user && (user.role === "ADMIN" || user.role === "OWNER" || mode === "ADMIN")) {
-                if (q.includes("attendance") || q.includes("aaye") || q.includes("present") || q.includes("bache") || q.includes("aaj")) {
+                if (/attendance|aaye|present|bache|aaj/i.test(q)) {
                     return {
                         reply: `Sir, aaj library me kul ${todayAttendanceCount} students ne attendance punch kiya hai.`,
-                        actionType: "GENERAL"
+                        actionType: "GENERAL",
+                        suggestions: ["💰 Total pending dues?", "🪑 Kitni seats khali hain?", "📋 Pending admissions?"]
                     };
                 }
-                if (q.includes("due") || q.includes("baki") || q.includes("recovery") || q.includes("pending fee")) {
+                if (/due|baki|recovery|pending/i.test(q)) {
                     return {
                         reply: `Sir, library ke sabhi active students ka kul pending due balance ₹${totalDuesAgg._sum.dueAmount || 0} hai. Total collection ₹${totalDuesAgg._sum.paidAmount || 0} ho chuka hai.`,
-                        actionType: "PAY_DUES"
+                        actionType: "PAY_DUES",
+                        suggestions: ["📊 Today attendance count?", "🪑 Available seats?", "📋 Pending approvals?"]
                     };
                 }
-                if (q.includes("admission") || q.includes("approval") || q.includes("request") || q.includes("pending")) {
+                if (/admission|approval|request/i.test(q)) {
                     return {
                         reply: `Sir, abhi ${pendingApprovalsCount} new seat booking requests admin approval ke liye pending hain.`,
-                        actionType: "GENERAL"
+                        actionType: "GENERAL",
+                        suggestions: ["💰 Pending dues kitne hain?", "📊 Aaj kitne students aaye?", "🪑 Total seats?"]
                     };
                 }
-                if (q.includes("seat") || q.includes("khali") || q.includes("vacant") || q.includes("capacity")) {
+                if (/seat|khali|vacant|capacity/i.test(q)) {
                     return {
                         reply: `Sir, kul capacity ${totalSeats} seats ki hai, jisme se lagbhag ${availableSeatsEstimate} seats abhi khali hain aur ${activeBookingsCount} active admissions hain.`,
-                        actionType: "BOOK_SEAT"
-                    };
-                }
-                if (q.includes("revenue") || q.includes("collection") || q.includes("kamai") || q.includes("paisa")) {
-                    return {
-                        reply: `Sir, ab tak kul ₹${totalDuesAgg._sum.paidAmount || 0} fee collect hui hai aur ₹${totalDuesAgg._sum.dueAmount || 0} dues pending hain.`,
-                        actionType: "GENERAL"
+                        actionType: "BOOK_SEAT",
+                        suggestions: ["💰 Collection summary?", "📊 Attendance audit?", "📋 Pending bookings?"]
                     };
                 }
             }
 
-            // --- STUDENT SPECIFIC INTENTS ---
+            // --- STUDENT PERSONAL DATA INTENTS ---
             if (user && (user.role === "STUDENT" || mode === "STUDENT")) {
-                if (q.includes("seat") || q.includes("number") || q.includes("mera seat") || q.includes("kaha")) {
+                if (/meri seat|seat no|seat number|kaha baithu|assigned seat/i.test(q)) {
                     if (myBooking?.seat) {
                         return {
                             reply: `${user.name} ji, aapki reserved seat ${myBooking.room?.name || "Main AC Hall"} me Seat Number ${myBooking.seat.seatNumber} hai (${myBooking.branch?.name || "Main Branch"}).`,
-                            actionType: "BOOK_SEAT"
+                            actionType: "BOOK_SEAT",
+                            suggestions: ["💵 Mera kitna due payment baki hai?", "📶 Wi-Fi password kya hai?", "📅 Membership kab tak valid hai?"]
                         };
                     } else {
                         return {
-                            reply: `${user.name} ji, abhi aapka koi approved seat active nahi hai. Aap Book tab se nayi seat chun sakte hain.`,
-                            actionType: "BOOK_SEAT"
+                            reply: `${user.name} ji, abhi aapka koi approved seat active nahi hai. Aap Book Seat tab se apni manpasand seat chun sakte hain.`,
+                            actionType: "BOOK_SEAT",
+                            suggestions: ["🪑 Available seats dekhein", "💰 Monthly fees kitni hai?", "🕒 Shifts timing?"]
                         };
                     }
                 }
-                if (q.includes("due") || q.includes("fee") || q.includes("baki") || q.includes("balance") || q.includes("paisa")) {
+                if (/due|baki|balance|pending fee|paisa baki/i.test(q)) {
                     if (myBooking) {
                         if (myBooking.dueAmount > 0) {
                             return {
-                                reply: `${user.name} ji, aapka ₹${myBooking.dueAmount} pending due balance hai. Aapne ₹${myBooking.paidAmount} jama kiya hai. Kripya counter par ya online pay karein.`,
-                                actionType: "PAY_DUES"
+                                reply: `${user.name} ji, aapka ₹${myBooking.dueAmount} pending due balance hai. Aapne ₹${myBooking.paidAmount} jama kiya hai. Counter par ya app se direct pay kar sakte hain.`,
+                                actionType: "PAY_DUES",
+                                suggestions: ["💳 Pay dues online", "🪑 Meri seat details", "📅 Validity kab tak hai?"]
                             };
                         } else {
                             return {
                                 reply: `Badhai ho ${user.name} ji! Aapka koi pending due nahi hai. Aapki monthly fees fully paid hai.`,
-                                actionType: "GENERAL"
+                                actionType: "GENERAL",
+                                suggestions: ["🪑 Meri seat number", "📅 Membership validity", "📶 Wi-Fi details"]
                             };
                         }
                     }
                 }
-                if (q.includes("valid") || q.includes("expiry") || q.includes("kab tak") || q.includes("date")) {
+                if (/valid|expiry|kab tak|validity/i.test(q)) {
                     if (myBooking?.endDate) {
                         const dateStr = new Date(myBooking.endDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
                         return {
                             reply: `${user.name} ji, aapki library membership ${dateStr} tak valid hai.`,
-                            actionType: "GENERAL"
+                            actionType: "GENERAL",
+                            suggestions: ["💵 Pending fees status", "🪑 Seat number", "🕒 Library timings"]
                         };
                     }
                 }
-                if (q.includes("attendance") || q.includes("punch") || q.includes("aaj") || q.includes("haziri")) {
+                if (/attendance|punch|aaj|haziri/i.test(q)) {
                     if (todayAttendance) {
                         const inTime = new Date(todayAttendance.checkInAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
                         const outTime = todayAttendance.checkOutAt ? new Date(todayAttendance.checkOutAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : null;
                         return {
                             reply: `${user.name} ji, aaj aapki attendance marked hai! Check-in: ${inTime}${outTime ? `, Check-out: ${outTime}` : " (Active inside library)"}.`,
-                            actionType: "GENERAL"
+                            actionType: "GENERAL",
+                            suggestions: ["🪑 Meri seat", "📶 Wi-Fi password", "📜 Library rules"]
                         };
                     } else {
                         return {
                             reply: `${user.name} ji, aaj aapne abhi tak attendance punch nahi kiya hai. Entrance Gate QR scan karke attendance mark kar lein.`,
-                            actionType: "GENERAL"
+                            actionType: "GENERAL",
+                            suggestions: ["📸 Attendance scan kaise karein?", "🪑 Meri seat number", "🕒 Timing kya hai?"]
                         };
                     }
                 }
             }
 
-            // --- GENERAL / PUBLIC INQUIRY INTENTS ---
-            if (q.includes("fee") || q.includes("price") || q.includes("charge") || q.includes("kitna") || q.includes("discount") || q.includes("rate")) {
-                const discountText = pricing.discountActive ? ` (Special discount offer chal raha hai: ${pricing.discountPercent}% OFF!)` : "";
+            // --- FRIENDLY FAQ INTENTS (WITH BROKEN SLANG & TYPO MATCHING) ---
+
+            // Toilet / Washroom Questions
+            if (/toilet.*(cctv|camera)|(cctv|camera).*toilet/i.test(q)) {
                 return {
-                    reply: `Sameer Library me monthly fee ₹${effectivePrice} per month hai${discountText}. Isme AC study hall, 5G Wi-Fi aur RO drinking water shaamil hai.`,
-                    actionType: "BOOK_SEAT"
+                    reply: "Nahi, bilkul nahi! 🚫📷 Toilets aur private areas mein koi camera nahi hota. Security cameras sirf common hallways aur study halls ke liye hote hain.",
+                    actionType: "GENERAL",
+                    suggestions: ["🚻 Toilet clean rehta hai?", "🔒 CCTV se privacy safe hai?", "📜 Library rules kya hain?"]
                 };
             }
-            if (q.includes("seat") || q.includes("khali") || q.includes("available") || q.includes("room")) {
+            if (/ladki.*(toilet|washroom)|girl.*(toilet|washroom)|separate.*(toilet|washroom)|toilet.*alag/i.test(q)) {
                 return {
-                    reply: `Sameer Library me abhi lagbhag ${availableSeatsEstimate} seats uplabdh hain. Sabhi seats par comfortable cushion chairs aur laptop charging sockets diye gaye hain.`,
-                    actionType: "BOOK_SEAT"
+                    reply: "Haan ji! Girls ke liye separate clean washroom facility available hai. Hamare yahan privacy aur hygiene ko highest priority di jati hai.",
+                    actionType: "GENERAL",
+                    suggestions: ["🚻 Toilet clean rehta hai?", "🔒 CCTV security facilities?", "🪑 Seat book kaise karein?"]
                 };
             }
-            if (q.includes("wifi") || q.includes("internet") || q.includes("password") || q.includes("speed")) {
+            if (/toilet|tolet|washroom|wash\s*rum|peshab|latrine|nature\s*call/i.test(q)) {
                 return {
-                    reply: `Sameer Library me high-speed 5G optical fiber Wi-Fi sabhi enrolled students ke liye bilkul free uplabdh hai. Counter se Wi-Fi connect kar sakte hain.`,
-                    actionType: "GENERAL"
-                };
-            }
-            if (q.includes("time") || q.includes("timing") || q.includes("shift") || q.includes("khulta") || q.includes("band")) {
-                return {
-                    reply: `Sameer Library me 3 shifts hain: Morning (8:00 AM to 2:00 PM), Evening (2:00 PM to 8:00 PM) aur Full Day (8:00 AM to 10:00 PM). Sunday ko bhi open rehti hai.`,
-                    actionType: "GENERAL"
-                };
-            }
-            if (q.includes("facility") || q.includes("suvidha") || q.includes("ac") || q.includes("ro") || q.includes("power") || q.includes("inverter")) {
-                return {
-                    reply: `Library me Silent AC Rooms, Inverter/Generator Power Backup, 5G Wi-Fi, RO Water, Personal Charging Points, Separate Washrooms aur 24x7 CCTV security uplabdh hai.`,
-                    actionType: "GENERAL"
-                };
-            }
-            if (q.includes("rule") || q.includes("niyam") || q.includes("discipline") || q.includes("khana") || q.includes("phone")) {
-                return {
-                    reply: `Library ke niyam: Reading hall me pin-drop silence banaye rakhein, mobile silent mode par rakhein aur lunch sirf designated break zone me karein.`,
-                    actionType: "GENERAL"
-                };
-            }
-            if (q.includes("book") || q.includes("admission") || q.includes("join") || q.includes("kaise") || q.includes("register")) {
-                return {
-                    reply: `Admission lene ke liye app me 'Book Seat' par jayein, branch aur manpasand seat select karein aur form submit karein. Admin turant seat approve kar dega.`,
-                    actionType: "BOOK_SEAT"
-                };
-            }
-            if (q.includes("branch") || q.includes("address") || q.includes("kaha") || q.includes("location") || q.includes("patna")) {
-                return {
-                    reply: `Sameer Library ki branches: ${branches.map(b => `${b.name} (${b.address || b.city})`).join(", ") || "Main Branch"}. Kisi bhi branch me visit kar sakte hain.`,
-                    actionType: "GENERAL"
-                };
-            }
-            if (q.includes("exam") || q.includes("upsc") || q.includes("bpsc") || q.includes("ssc") || q.includes("neet") || q.includes("jee") || q.includes("padhai") || q.includes("focus")) {
-                return {
-                    reply: `Sameer Library competitive exams ki taiyari ke liye best shaant vatavaran deta hai. Daily routine aur regular self-study se safalta zaroor milegi! All the best!`,
-                    actionType: "GENERAL"
+                    reply: "Haan ji! 😄 Toilet facility available hai. Padhai ke beech nature ka call aaye to ignore mat karna! Regular cleanliness maintain hoti hai. 🚻",
+                    actionType: "GENERAL",
+                    suggestions: ["🚺 Girls ke liye separate washroom hai?", "🔒 CCTV security kahan hai?", "🕒 Shifts timing?"]
                 };
             }
 
-            // Default warm welcome response
-            if (user && (user.role === "STUDENT" || mode === "STUDENT")) {
+            // CCTV, Privacy & Surveillance
+            if (/nazar|reels|dekh rahe/i.test(q)) {
                 return {
-                    reply: `Namaste ${user.name} ji! Main Sameer AI hoon. Aap apni seat, pending fee, valid date ya library rules ke bare me mujhse puch sakte hain.`,
-                    actionType: "GENERAL"
+                    reply: "Seat par tum padh rahe ho ya reels dekh rahe ho, iska live commentary nahi chalega! 😂 Security cameras sirf safety ke liye hote hain, personal activities monitor karne ke liye nahi.",
+                    actionType: "GENERAL",
+                    suggestions: ["🔒 CCTV kahan laga hai?", "📱 Phone silent mode rule?", "🤫 Silence rules?"]
                 };
             }
-            if (user && (user.role === "ADMIN" || mode === "ADMIN")) {
+            if (/cctv|camera|surveillance|privacy|nazar/i.test(q)) {
                 return {
-                    reply: `Namaste Admin Sir! Aaj ${todayAttendanceCount} students present hain aur ₹${totalDuesAgg._sum.dueAmount || 0} dues pending hain. Main kis audit me madad karu?`,
-                    actionType: "GENERAL"
+                    reply: "Haan, student security ke liye common areas aur corridors mein 24x7 CCTV coverage hai. Private areas mein koi camera nahi hota, aapki privacy 100% safe hai. 🔒",
+                    actionType: "GENERAL",
+                    suggestions: ["🚻 Toilet me camera to nahi hai?", "🎒 Bag storage facility?", "🕒 Night study shift?"]
+                };
+            }
+
+            // Food, Chai & Eating
+            if (/chai|tea|coffee/i.test(q)) {
+                return {
+                    reply: "Library ke pass tea aur refreshments aasani se mil jate hain ☕. Bas books ke paas chai mat le aana—Sameer AI abhi chai serve nahi kar sakta! 😂",
+                    actionType: "GENERAL",
+                    suggestions: ["🍔 Khana kha sakte hain?", "🕒 Library timings?", "📶 Wi-Fi speed kitni hai?"]
+                };
+            }
+            if (/khana|food|lunch|tiffin|samosa|bhojan|eat/i.test(q)) {
+                return {
+                    reply: "Haan, aap apna tiffin la sakte hain! Lekin khana sirf designated break zone mein allow hai. Books ke paas samosa ya lunch box = risky friendship! 😄",
+                    actionType: "GENERAL",
+                    suggestions: ["☕ Library me chai milegi?", "🤫 Silence rules?", "🕒 Break timing?"]
+                };
+            }
+
+            // Phone & Calling Rules
+            if (/phone|mobile|call|silent|ring/i.test(q)) {
+                return {
+                    reply: "Phone use kar sakte hain, lekin silent mode best friend hai 🤫. Emergency call aaye to corridor ya break area mein jaakar baat karein.",
+                    actionType: "GENERAL",
+                    suggestions: ["💻 Laptop la sakte hain?", "🔋 Charging point hai?", "📜 Library rules?"]
+                };
+            }
+
+            // Wi-Fi & Internet
+            if (/wifi|wi-fi|internet|net|speed|password/i.test(q)) {
+                return {
+                    reply: "Haan! Sabhi enrolled students ke liye high-speed 5G optical fiber Wi-Fi bilkul free available hai. Admission ke baad counter se access details mil jayengi. 📶",
+                    actionType: "GENERAL",
+                    suggestions: ["🔋 Charging socket desk par hai?", "💻 Laptop allowed hai?", "💰 Monthly fee kitni hai?"]
+                };
+            }
+
+            // Charging & Laptops
+            if (/charg|socket|plug|board|battery/i.test(q)) {
+                return {
+                    reply: "Haan! Har desk par personal charging points aur laptop power sockets diye gaye hain 🔋. Bas apna charger le aana—Sameer AI charger nahi ban sakta! 😄",
+                    actionType: "GENERAL",
+                    suggestions: ["💻 Laptop la sakte hain?", "📶 Wi-Fi password?", "🪑 Seat book kaise karein?"]
+                };
+            }
+            if (/laptop|computer/i.test(q)) {
+                return {
+                    reply: "Bilkul! Laptop la sakte hain 💻. Har desk par charging socket aur high-speed Wi-Fi hai. Bas keyboard typing se doosron ki concentration na toote.",
+                    actionType: "GENERAL",
+                    suggestions: ["🔋 Charging point kahan hai?", "📶 Wi-Fi availability?", "🕒 Shifts timing?"]
+                };
+            }
+
+            // AC, Fan & Temperature
+            if (/(\bac\b|air\s*con|fan|hawa|thand|garmi|cooler|temp)/i.test(q)) {
+                return {
+                    reply: "Haan ji! Fully AC silent study rooms hain aur fans bhi available hain 🥶. Agar thand zyada lage to ek halki hoodie ready rakhna! Padhai ke saath hawa bhi free! 😄",
+                    actionType: "GENERAL",
+                    suggestions: ["🕒 Library shifts kya hain?", "🪑 Seat availability?", "💰 Monthly fee?"]
+                };
+            }
+
+            // Bag Storage & Lockers
+            if (/bag|locker|basta|thela|storage/i.test(q)) {
+                return {
+                    reply: "Haan, bag aur books rakhne ke liye designated bag storage racks aur locker facility available hai 🎒. Aap apna saman aaram se rakh sakte hain.",
+                    actionType: "GENERAL",
+                    suggestions: ["💻 Laptop allowed hai?", "🔒 CCTV security safe hai?", "🪑 Seat book kaise karein?"]
+                };
+            }
+
+            // Girls, Safety & Respectful Culture
+            if (/ladki.*(baat|talk|friend)|girl.*(baat|talk|friend)/i.test(q)) {
+                return {
+                    reply: "Padhai ke liye aaye ho boss! 😄 Library mein sabhi respectful silence maintain karte hain. Disturb karna strictly allowed nahi hai.",
+                    actionType: "GENERAL",
+                    suggestions: ["🤫 Silence ke rules?", "🕒 Library timings?", "🪑 Seat booking process?"]
+                };
+            }
+            if (/girls|ladki|female|women|safe|suraksha/i.test(q)) {
+                return {
+                    reply: "Haan, Sameer Library mein girls aur boys dono ke liye 100% safe, disciplined aur respectful study environment hai. Separate washrooms aur 24x7 CCTV security available hai. 🛡️",
+                    actionType: "GENERAL",
+                    suggestions: ["🚺 Girls separate washroom?", "🔒 CCTV surveillance safe hai?", "🕒 Shifts timing?"]
+                };
+            }
+
+            // Timings, Night Study & Sunday
+            if (/late|deri/i.test(q)) {
+                return {
+                    reply: "Aap apni shift ke according late entry le sakte hain. Bas entry karte waqt gate QR scan se attendance zaroor mark karein aur silence banaye rakhein.",
+                    actionType: "GENERAL",
+                    suggestions: ["🕒 Shifts timing kya hain?", "🌙 Raat ko kab tak khula hai?", "📅 Sunday open rehta hai?"]
+                };
+            }
+            if (/raat|night|sunday|time|timing|shift|khulta|band|open|close|kab tak/i.test(q)) {
+                return {
+                    reply: "Sameer Library 7 days open rehti hai (Sunday bhi!). 3 shifts hain: Morning (8 AM - 2 PM), Evening (2 PM - 8 PM) aur Full Day (8 AM - 10 PM) 🕒.",
+                    actionType: "GENERAL",
+                    suggestions: ["💰 Monthly fee kitni hai?", "🪑 Seat availability?", "📝 Admission kaise lein?"]
+                };
+            }
+
+            // Seat Dispute / Security
+            if (/seat.*le liya|koi.*baith|seat.*dispute/i.test(q)) {
+                return {
+                    reply: "Agar seat aapke account par officially approved hai, to koi aur wahan nahi baith sakta! Aap politely unhe bata sakte hain ya app/admin se complaint kar sakte hain.",
+                    actionType: "GENERAL",
+                    suggestions: ["🪑 Meri seat number kya hai?", "📞 Admin contact", "📜 Library rules?"]
+                };
+            }
+
+            // Boredom, Motivation & Study Tips
+            if (/bore|boring|neend|neend aa rahi|thak gya|focus/i.test(q)) {
+                return {
+                    reply: "Bore ho gaye ya neend aa rahi hai? 😂 5 minute ka break lo, thanda paani piyo, thoda walk karo... phir books ke battlefield mein wapas! Rule simple hai: 50 min study, 10 min break. 💪",
+                    actionType: "GENERAL",
+                    suggestions: ["📚 Padhai ka best routine?", "☕ Chai break rules?", "🕒 Full day shift timing?"]
+                };
+            }
+            if (/padhai kaise|routine|shanti|peace/i.test(q)) {
+                return {
+                    reply: "Padhai ka simple funda: Phone silent → Target set → 50 min deep study → 10 min break. Yahan pin-drop silence vatavaran milega, bas consistency maintain rakhein! 🚀",
+                    actionType: "GENERAL",
+                    suggestions: ["🕒 Library shifts timing?", "🪑 Seat availability?", "💰 Monthly fee kitni hai?"]
+                };
+            }
+            if (/first day|pehle din|kya karu/i.test(q)) {
+                return {
+                    reply: "First day process simple hai: App me Register karein → Seat select karein → Admin approve karega → Gate QR se attendance lagayein → Study mode ON! 🚀",
+                    actionType: "BOOK_SEAT",
+                    suggestions: ["🪑 Seat book kaise karein?", "💰 Fees kitni hai?", "🕒 Shift timings?"]
+                };
+            }
+
+            // Fees, Price & Admission
+            if (/fee|paisa|kitna|price|charge|rate|discount|admission|join|book|seat/i.test(q)) {
+                const discountText = pricing.discountActive ? ` (Special offer: ${pricing.discountPercent}% OFF!)` : "";
+                return {
+                    reply: `Sameer Library me monthly fee ₹${effectivePrice} hai${discountText}. Isme AC hall, 5G Wi-Fi, RO water aur personal charging socket sab shaamil hai. ${availableSeatsEstimate} seats khali hain.`,
+                    actionType: "BOOK_SEAT",
+                    suggestions: ["🪑 Available seats dekhein", "🕒 Shift timings kya hain?", "🚻 Facilities kya hain?"]
+                };
+            }
+
+            // Default Friendly Welcome
+            if (user && (user.role === "STUDENT" || mode === "STUDENT")) {
+                return {
+                    reply: `Namaste ${user.name} ji! Main aapka Library Buddy Sameer AI hoon 😄. Seat, dues, Wi-Fi, washroom ya rules ke bare me jo chahe puchiye!`,
+                    actionType: "GENERAL",
+                    suggestions: ["🪑 Meri seat number?", "💵 Pending dues kitne hain?", "📶 Wi-Fi password?", "🚻 Washroom facility?"]
                 };
             }
             return {
-                reply: `Namaste! Sameer Library me aapka swagat hai. Hamare yahan monthly fee ₹${effectivePrice} hai aur ${availableSeatsEstimate} seats uplabdh hain. AC silent rooms aur 5G Wi-Fi ki suvidha uplabdh hai.`,
-                actionType: "BOOK_SEAT"
+                reply: `Namaste! Sameer Library me aapka swagat hai 😄. Hamare yahan monthly fee ₹${effectivePrice} hai, AC silent rooms, 5G Wi-Fi aur separate washrooms uplabdh hain. Bataiye kis cheez me madad karun?`,
+                actionType: "BOOK_SEAT",
+                suggestions: ["💰 Monthly fee kitni hai?", "🪑 Seat availability?", "🕒 Library timings?", "🚻 Toilet & facilities?"]
             };
         };
 
@@ -452,6 +594,7 @@ ${adminContextStr}
                 reply: resolved.reply,
                 userTranscript: audioBase64 ? (message || "Aapka voice sawal") : message,
                 actionType: resolved.actionType,
+                suggestedQuestions: resolved.suggestions,
                 userName: user?.name || "Student",
                 mode: "dynamic_db_engine",
             });
@@ -483,8 +626,8 @@ ${adminContextStr}
                         },
                         contents,
                         generationConfig: {
-                            temperature: 0.4,
-                            maxOutputTokens: 150,
+                            temperature: 0.5,
+                            maxOutputTokens: 220,
                             topP: 0.85,
                         }
                     })
@@ -512,6 +655,7 @@ ${adminContextStr}
                 reply: resolved.reply,
                 userTranscript: audioBase64 ? "Voice audio" : message,
                 actionType: resolved.actionType,
+                suggestedQuestions: resolved.suggestions,
                 userName: user?.name || "Student",
                 fallback: true,
             });
@@ -525,25 +669,48 @@ ${adminContextStr}
             .trim();
         let reply = "";
         let userTranscript = "";
+        let suggestedQuestions: string[] = [];
 
-        if (audioBase64) {
-            if (replyRaw.includes("TRANSCRIPT:") && replyRaw.includes("ANSWER:")) {
-                const parts = replyRaw.split("ANSWER:");
-                userTranscript = parts[0].replace("TRANSCRIPT:", "").trim();
-                reply = parts[1].trim();
-            } else if (replyRaw.includes("ANSWER:")) {
-                const answerIdx = replyRaw.indexOf("ANSWER:");
-                reply = replyRaw.substring(answerIdx + 7).trim();
-                userTranscript = "Voice query";
-            } else {
-                reply = replyRaw || "Namaste! Main aapki aawaz samajh gaya hoon.";
-                userTranscript = "Voice audio";
+        // Parse structured tags: TRANSCRIPT:, ANSWER:, SUGGESTIONS:
+        let parsedAnswer = replyRaw;
+
+        if (replyRaw.includes("TRANSCRIPT:")) {
+            const transcriptMatch = replyRaw.match(/TRANSCRIPT:\s*([\s\S]*?)(?=(ANSWER:|SUGGESTIONS:|$))/);
+            if (transcriptMatch?.[1]) {
+                userTranscript = transcriptMatch[1].trim();
             }
-        } else {
-            reply = replyRaw || `Namaste! Sameer Library me aapka swagat hai. Aap library timing, fees ya seat booking ke bare me puch sakte hain.`;
         }
 
+        if (replyRaw.includes("ANSWER:")) {
+            const answerMatch = replyRaw.match(/ANSWER:\s*([\s\S]*?)(?=(SUGGESTIONS:|$))/);
+            if (answerMatch?.[1]) {
+                parsedAnswer = answerMatch[1].trim();
+            }
+        }
+
+        if (replyRaw.includes("SUGGESTIONS:")) {
+            const suggestionsMatch = replyRaw.match(/SUGGESTIONS:\s*([\s\S]*$)/);
+            if (suggestionsMatch?.[1]) {
+                suggestedQuestions = suggestionsMatch[1]
+                    .split("|")
+                    .map((s: string) => s.trim().replace(/^[-•*]\s*/, ""))
+                    .filter((s: string) => s.length > 2 && s.length < 40)
+                    .slice(0, 4);
+            }
+        }
+
+        reply = parsedAnswer || "Namaste! Main aapki baat samajh gaya hoon.";
         reply = reply.replace(/\*\*/g, '').replace(/###/g, '').replace(/[\*•]/g, '').trim();
+
+        // If no suggestions were generated by Gemini, supply context defaults
+        if (!suggestedQuestions || suggestedQuestions.length === 0) {
+            suggestedQuestions = [
+                "💰 Monthly fee kitni hai?",
+                "🪑 Seat availability?",
+                "🕒 Library timings?",
+                "🚻 Toilet & facilities?",
+            ];
+        }
 
         // Action recommendation chips (e.g. for CTAs)
         const actionType = reply.toLowerCase().includes("book") || reply.toLowerCase().includes("seat")
@@ -555,8 +722,9 @@ ${adminContextStr}
         return NextResponse.json({
             success: true,
             reply,
-            userTranscript: userTranscript || undefined,
+            userTranscript: userTranscript || (audioBase64 ? "Aapka voice sandesh" : undefined),
             actionType,
+            suggestedQuestions,
             userName: user?.name || "Student",
             modelUsed: successfulModel,
         });
