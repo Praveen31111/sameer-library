@@ -64,14 +64,10 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
 
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recordingTimeoutRef = useRef<any>(null);
-  const meteringIntervalRef = useRef<any>(null);
   const activeAudioPlayerRef = useRef<AudioPlayer | null>(null);
   const handsFreeModeRef = useRef(true);
   const visibleRef = useRef(visible);
   const isProcessingVoiceRef = useRef(false);
-  const speechStartedRef = useRef(false);
-  const silenceMsRef = useRef(0);
-  const lastDurationMillisRef = useRef(0);
   const autoListenTimerRef = useRef<any>(null);
 
   const scrollViewRef = useRef<ScrollView>(null);
@@ -90,10 +86,6 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
       if (recordingTimeoutRef.current) {
         clearTimeout(recordingTimeoutRef.current);
         recordingTimeoutRef.current = null;
-      }
-      if (meteringIntervalRef.current) {
-        clearInterval(meteringIntervalRef.current);
-        meteringIntervalRef.current = null;
       }
       if (recorder.isRecording) {
         try {
@@ -360,39 +352,17 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
         playsInSilentMode: true,
       });
 
-      speechStartedRef.current = false;
-      silenceMsRef.current = 0;
-      lastDurationMillisRef.current = 0;
-
       await recorder.prepareToRecordAsync();
       recorder.record();
       setIsRecording(true);
 
-      if (meteringIntervalRef.current) clearInterval(meteringIntervalRef.current);
-      meteringIntervalRef.current = setInterval(() => {
-        try {
-          const status = recorder.getStatus();
-          if (status?.isRecording && status.metering !== undefined) {
-            if (status.metering > -38) {
-              speechStartedRef.current = true;
-              silenceMsRef.current = 0;
-            } else if (speechStartedRef.current) {
-              silenceMsRef.current += 120;
-              if (silenceMsRef.current >= 950 && !isProcessingVoiceRef.current) {
-                stopVoiceRecording();
-              }
-            }
-          }
-        } catch (e) {}
-      }, 120);
-
-      // Fast safety timeout: 2.8 seconds fallback (normal question is 1.5-2s)
+      // Comfortable 6.5 seconds safety window so student can speak without being rushed
       if (recordingTimeoutRef.current) clearTimeout(recordingTimeoutRef.current);
       recordingTimeoutRef.current = setTimeout(() => {
         if (!isProcessingVoiceRef.current) {
           stopVoiceRecording();
         }
-      }, 2800);
+      }, 6500);
     } catch (e) {
       console.error('Audio recording start failed:', e);
       setIsRecording(false);
@@ -401,11 +371,6 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
 
   // Stop Voice Recording and Send to Gemini
   const stopVoiceRecording = async () => {
-    if (meteringIntervalRef.current) {
-      clearInterval(meteringIntervalRef.current);
-      meteringIntervalRef.current = null;
-    }
-
     if (isProcessingVoiceRef.current) return;
     isProcessingVoiceRef.current = true;
 
@@ -442,11 +407,18 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
         throw new Error('Recorded audio could not be converted to base64');
       }
 
+      const ext = uri.split('.').pop()?.toLowerCase();
+      let detectedMime = 'audio/m4a';
+      if (ext === 'mp4') detectedMime = 'audio/mp4';
+      else if (ext === 'aac') detectedMime = 'audio/aac';
+      else if (ext === 'wav') detectedMime = 'audio/wav';
+      else if (ext === '3gp' || ext === '3gpp') detectedMime = 'audio/3gpp';
+
       const res = await apiRequest('/ai/chat', {
         method: 'POST',
         body: JSON.stringify({
           audioBase64: base64Audio,
-          mimeType: 'audio/m4a',
+          mimeType: detectedMime,
           mode,
           wantVoice: !voiceMuted,
           conversationHistory: messages.slice(-4).map((m) => ({
