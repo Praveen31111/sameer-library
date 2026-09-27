@@ -25,6 +25,7 @@ import {
 } from 'expo-audio';
 import { File } from 'expo-file-system';
 import * as FileSystem from 'expo-file-system/legacy';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { apiRequest, API_URL } from '../services/api';
 
 const { width } = Dimensions.get('window');
@@ -52,6 +53,7 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
   studentName,
   onActionClick,
 }) => {
+  const insets = useSafeAreaInsets();
   const [messages, setMessages] = useState<SameerAIMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [isThinking, setIsThinking] = useState(false);
@@ -752,7 +754,7 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
           )}
 
           {/* Input Bar with Voice Mic & Text Input */}
-          <View style={styles.inputContainer}>
+          <View style={[styles.inputContainer, { paddingBottom: Math.max(insets.bottom, 14) }]}>
             {/* Mic Record Button */}
             <TouchableOpacity
               onPress={() => {
@@ -820,6 +822,7 @@ export const FloatingSameerAIOrb: React.FC<{
   onPress: () => void;
   label?: string;
 }> = ({ onPress, label = 'Sameer AI' }) => {
+  const insets = useSafeAreaInsets();
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -831,8 +834,10 @@ export const FloatingSameerAIOrb: React.FC<{
     ).start();
   }, []);
 
+  const bottomOffset = 68 + Math.max(insets.bottom, 10);
+
   return (
-    <Animated.View style={[styles.floatingOrbContainer, { transform: [{ scale: pulseAnim }] }]}>
+    <Animated.View style={[styles.floatingOrbContainer, { bottom: bottomOffset, transform: [{ scale: pulseAnim }] }]}>
       <TouchableOpacity
         onPress={onPress}
         activeOpacity={0.85}

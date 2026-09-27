@@ -254,8 +254,8 @@ ${adminContextStr}
                 role: "user",
                 parts: [
                     {
-                        inline_data: {
-                            mime_type: mimeType || "audio/m4a",
+                        inlineData: {
+                            mimeType: mimeType || "audio/m4a",
                             data: audioBase64
                         }
                     },
@@ -441,10 +441,10 @@ ${adminContextStr}
             };
         };
 
-        // Check if Gemini API key is valid (Google AI Studio keys start with AIzaSy)
-        const isKeyValid = apiKey && typeof apiKey === "string" && apiKey.startsWith("AIzaSy") && apiKey.length > 25;
+        // Check if Gemini API key is configured
+        const isKeyValid = apiKey && typeof apiKey === "string" && apiKey.trim().length > 20;
 
-        // If no valid Gemini API key is configured, use our intelligent database-grounded engine
+        // If no Gemini API key is configured, use our intelligent database-grounded engine
         if (!isKeyValid) {
             const resolved = generateSmartDynamicReply(message || (audioBase64 ? "voice inquiry" : ""), !!audioBase64);
             return NextResponse.json({
@@ -457,10 +457,11 @@ ${adminContextStr}
             });
         }
 
-        // Call Google Gemini API (tries 2.0 Flash then 1.5 Flash) with fallback to Smart Engine
+        // Call Google Gemini API (uses active gemini-3.5-flash-lite, gemini-flash-lite-latest, gemini-3.5-flash)
         const modelsToTry = [
-            "gemini-2.0-flash",
-            "gemini-1.5-flash",
+            "gemini-3.5-flash-lite",
+            "gemini-flash-lite-latest",
+            "gemini-3.5-flash",
         ];
 
         let geminiData: any = null;

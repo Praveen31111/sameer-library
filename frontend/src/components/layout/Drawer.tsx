@@ -1,5 +1,6 @@
 import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Modal, SafeAreaView, Dimensions, Pressable } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Modal, Dimensions, Pressable, Platform, StatusBar } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { COLORS } from '../../utils/constants';
@@ -14,11 +15,15 @@ const { width } = Dimensions.get('window');
 
 export const Drawer: React.FC<DrawerProps> = ({ visible, onClose, onNavigate }) => {
   const { user, logout } = useAuth();
+  const insets = useSafeAreaInsets();
   
   const handleLinkPress = (screen: 'Home' | 'Login' | 'Register' | 'StudentDashboard' | 'AdminDashboard', anchor?: string) => {
     onNavigate(screen, anchor);
     onClose();
   };
+
+  const topPadding = Math.max(insets.top, Platform.OS === 'android' ? (StatusBar.currentHeight || 20) : 10);
+  const bottomPadding = Math.max(insets.bottom, 16);
 
   return (
     <Modal
@@ -29,7 +34,7 @@ export const Drawer: React.FC<DrawerProps> = ({ visible, onClose, onNavigate }) 
     >
       <Pressable style={styles.backdrop} onPress={onClose}>
         <View style={styles.drawerContainer}>
-          <SafeAreaView style={styles.drawerContent}>
+          <View style={[styles.drawerContent, { paddingTop: topPadding, paddingBottom: bottomPadding }]}>
             {/* Header / Close button */}
             <View style={styles.header}>
               <Text style={styles.logoText}>
@@ -117,7 +122,7 @@ export const Drawer: React.FC<DrawerProps> = ({ visible, onClose, onNavigate }) 
             <View style={styles.footer}>
               <Text style={styles.footerText}>✨ Now Open in Lucknow</Text>
             </View>
-          </SafeAreaView>
+          </View>
         </View>
       </Pressable>
     </Modal>

@@ -11,6 +11,7 @@ import {
 } from './src/screens';
 import { ScreenName } from './src/navigation';
 import { COLORS } from './src/utils';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 function AppContent() {
   const { user, loading } = useAuth();
@@ -98,11 +99,13 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
 
 export default function App() {
   return (
-    <ErrorBoundary>
-      <AuthProvider>
-        <AppContent />
-      </AuthProvider>
-    </ErrorBoundary>
+    <SafeAreaProvider>
+      <ErrorBoundary>
+        <AuthProvider>
+          <AppContent />
+        </AuthProvider>
+      </ErrorBoundary>
+    </SafeAreaProvider>
   );
 }
 

@@ -1,5 +1,6 @@
 import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, Platform, StatusBar, Image } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Platform, StatusBar, Image } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../utils/constants';
 
@@ -22,8 +23,11 @@ export const Navbar: React.FC<NavbarProps> = ({
   showBack = false,
   onBackPress,
 }) => {
+  const insets = useSafeAreaInsets();
+  const topPadding = Math.max(insets.top, Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 0);
+
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <View style={[styles.safeArea, { paddingTop: topPadding }]}>
       <View style={styles.container}>
         {/* Left Side: Back button OR Logo & Title */}
         <View style={styles.leftSection}>
@@ -69,7 +73,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           )}
         </View>
       </View>
-    </SafeAreaView>
+    </View>
   );
 };
 
@@ -88,7 +92,6 @@ const styles = StyleSheet.create({
       },
       android: {
         elevation: 2,
-        paddingTop: StatusBar.currentHeight || 28,
       },
       web: {
         position: 'sticky' as any,

@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   Alert,
   FlatList,
-  SafeAreaView,
   Dimensions,
   TextInput,
   ActivityIndicator,
@@ -21,6 +20,7 @@ import {
   Linking,
   BackHandler,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
@@ -49,6 +49,7 @@ const PHOTO_PRESETS = [
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) => {
   const { user, logout } = useAuth();
+  const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<AdminTab>('Overview');
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -2569,7 +2570,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       {/* Header Bar */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
@@ -2635,7 +2636,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
       <View style={styles.contentArea}>{renderTabContent()}</View>
 
       {/* Bottom Navigation Tab Bar (6 Core Tabs) */}
-      <View style={styles.tabBar}>
+      <View style={[styles.tabBar, { paddingBottom: Math.max(insets.bottom, Platform.OS === 'ios' ? 12 : 8) }]}>
         <TouchableOpacity
           style={[styles.tabButton, activeTab === 'Overview' && styles.tabButtonActive]}
           onPress={() => setActiveTab('Overview')}
@@ -3950,7 +3951,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 28) : 0,
   },
   centerContainer: {
     flex: 1,

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, TextInput, Alert, Dimensions, SafeAreaView, ActivityIndicator, Platform, Image, Modal, StatusBar, BackHandler, Animated } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, TextInput, Alert, Dimensions, ActivityIndicator, Platform, Image, Modal, StatusBar, BackHandler, Animated } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../context/AuthContext';
@@ -2030,7 +2031,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       {/* Top App Bar */}
       <View style={styles.topAppBar}>
         <View style={styles.appBarLeft}>
@@ -2351,7 +2352,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 28) : 0,
   },
   scrollContent: {
     paddingHorizontal: 20,

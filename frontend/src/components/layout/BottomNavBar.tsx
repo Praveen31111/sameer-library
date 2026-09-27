@@ -1,5 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../utils/constants';
 
@@ -11,6 +12,9 @@ export interface BottomNavBarProps {
 }
 
 export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeTab, onTabPress }) => {
+  const insets = useSafeAreaInsets();
+  const bottomPadding = Math.max(insets.bottom, Platform.OS === 'ios' ? 12 : 8);
+
   const tabs: { id: BottomNavTab; label: string; activeIcon: keyof typeof Ionicons.glyphMap; inactiveIcon: keyof typeof Ionicons.glyphMap }[] = [
     { id: 'Home', label: 'Home', activeIcon: 'home', inactiveIcon: 'home-outline' },
     { id: 'Book', label: 'Book', activeIcon: 'bookmark', inactiveIcon: 'bookmark-outline' },
@@ -19,7 +23,7 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeTab, onTabPres
   ];
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingBottom: bottomPadding, height: 56 + bottomPadding }]}>
       {tabs.map((tab) => {
         const isActive = activeTab === tab.id;
         return (
