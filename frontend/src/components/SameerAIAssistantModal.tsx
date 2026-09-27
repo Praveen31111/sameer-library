@@ -15,10 +15,17 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Speech from 'expo-speech';
-import { Audio } from 'expo-av';
+import {
+  useAudioRecorder,
+  createAudioPlayer,
+  AudioPlayer,
+  RecordingPresets,
+  requestRecordingPermissionsAsync,
+  setAudioModeAsync,
+} from 'expo-audio';
 import { File } from 'expo-file-system';
 import * as FileSystem from 'expo-file-system/legacy';
-import { apiRequest } from '../services/api';
+import { apiRequest, API_URL } from '../services/api';
 
 const { width } = Dimensions.get('window');
 
@@ -53,8 +60,9 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
   const [isRecording, setIsRecording] = useState(false);
   const [handsFreeMode, setHandsFreeMode] = useState(true);
 
-  const recordingRef = useRef<Audio.Recording | null>(null);
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recordingTimeoutRef = useRef<any>(null);
+  const activeAudioPlayerRef = useRef<AudioPlayer | null>(null);
   const handsFreeModeRef = useRef(true);
   const visibleRef = useRef(visible);
   const isProcessingVoiceRef = useRef(false);
@@ -80,11 +88,17 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
         clearTimeout(recordingTimeoutRef.current);
         recordingTimeoutRef.current = null;
       }
-      if (recordingRef.current) {
+      if (recorder.isRecording) {
         try {
-          recordingRef.current.stopAndUnloadAsync();
+          recorder.stop();
         } catch (e) {}
-        recordingRef.current = null;
+      }
+      if (activeAudioPlayerRef.current) {
+        try {
+          activeAudioPlayerRef.current.pause();
+          activeAudioPlayerRef.current.remove();
+        } catch (e) {}
+        activeAudioPlayerRef.current = null;
       }
       Speech.stop();
       setIsSpeaking(false);
@@ -179,18 +193,24 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
     }
     Speech.stop();
     setIsSpeaking(false);
-    if (recordingRef.current) {
+    if (recorder.isRecording) {
       try {
-        await recordingRef.current.stopAndUnloadAsync();
+        await recorder.stop();
       } catch (e) {}
-      recordingRef.current = null;
+    }
+    if (activeAudioPlayerRef.current) {
+      try {
+        activeAudioPlayerRef.current.pause();
+        activeAudioPlayerRef.current.remove();
+      } catch (e) {}
+      activeAudioPlayerRef.current = null;
     }
     setIsRecording(false);
     isProcessingVoiceRef.current = false;
     onClose();
   };
 
-  // Speak AI Text using native Indian English / Hindi voice with finished callback
+  // Speak AI Text using Cloned Real Voice (or fallback to native TTS)
   const speakText = async (text: string, onSpeechFinished?: () => void) => {
     try {
       if (voiceMuted) {
@@ -198,11 +218,50 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
         return;
       }
       await Speech.stop();
+      if (activeAudioPlayerRef.current) {
+        try {
+          activeAudioPlayerRef.current.pause();
+          activeAudioPlayerRef.current.remove();
+        } catch (e) {}
+        activeAudioPlayerRef.current = null;
+      }
+
       setIsSpeaking(true);
+      const speechContent = text.replace(/[\*\#\_]/g, '').trim();
 
-      // Clean text for speech
-      const speechContent = text.replace(/[\*\#\_]/g, '');
+      // 1. Try to fetch synthesized cloned voice audio from backend /ai/voice
+      try {
+        const voiceRes = await apiRequest('/ai/voice', {
+          method: 'POST',
+          body: JSON.stringify({ text: speechContent, language: 'hi' }),
+        });
 
+        if (voiceRes?.success && voiceRes?.audioUrl && !voiceRes.fallbackTts) {
+          const baseUrl = API_URL.replace(/\/api\/?$/, '');
+          const audioUrl = voiceRes.audioUrl.startsWith('http')
+            ? voiceRes.audioUrl
+            : `${baseUrl}${voiceRes.audioUrl}`;
+
+          const player = createAudioPlayer(audioUrl);
+          activeAudioPlayerRef.current = player;
+
+          (player as any).addListener('playbackStatusUpdate', (status: any) => {
+            if (status?.didJustFinish) {
+              setIsSpeaking(false);
+              try { player.remove(); } catch (e) {}
+              activeAudioPlayerRef.current = null;
+              onSpeechFinished?.();
+            }
+          });
+
+          player.play();
+          return;
+        }
+      } catch (voiceFetchErr) {
+        console.warn('Voice clone fetch note, using local TTS:', voiceFetchErr);
+      }
+
+      // 2. Seamless local TTS fallback
       Speech.speak(speechContent, {
         language: 'hi-IN',
         pitch: 1.0,
@@ -240,63 +299,32 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
         autoListenTimerRef.current = null;
       }
 
-      const perm = await Audio.requestPermissionsAsync();
+      const perm = await requestRecordingPermissionsAsync();
       if (!perm.granted) {
         alert('Microphone permission zaruri hai bolkar sawal puchne ke liye.');
         return;
       }
 
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
+      await setAudioModeAsync({
+        allowsRecording: true,
+        playsInSilentMode: true,
       });
 
       speechStartedRef.current = false;
       silenceMsRef.current = 0;
       lastDurationMillisRef.current = 0;
 
-      const recording = new Audio.Recording();
-      await recording.prepareToRecordAsync({
-        ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
-        isMeteringEnabled: true,
-      });
-
-      recording.setOnRecordingStatusUpdate((status) => {
-        if (!status.isRecording || !status.canRecord) return;
-
-        const duration = status.durationMillis;
-        const delta = duration - (lastDurationMillisRef.current || duration);
-        lastDurationMillisRef.current = duration;
-
-        const metering = status.metering ?? -160;
-
-        // Metering threshold: speech is typically > -38 dB
-        if (metering > -38) {
-          speechStartedRef.current = true;
-          silenceMsRef.current = 0;
-        } else if (speechStartedRef.current) {
-          silenceMsRef.current += (delta > 0 ? delta : 200);
-
-          // If student spoke and then was silent for 1.8 seconds, auto-stop and send!
-          if (silenceMsRef.current >= 1800 && !isProcessingVoiceRef.current) {
-            stopVoiceRecording();
-          }
-        }
-      });
-
-      await recording.setProgressUpdateInterval(200);
-      await recording.startAsync();
-
-      recordingRef.current = recording;
+      await recorder.prepareToRecordAsync();
+      recorder.record();
       setIsRecording(true);
 
-      // Max safety timeout: 10 seconds fallback
+      // Fast safety timeout: 4.5 seconds fallback (normal question is 2-3s)
       if (recordingTimeoutRef.current) clearTimeout(recordingTimeoutRef.current);
       recordingTimeoutRef.current = setTimeout(() => {
-        if (recordingRef.current && !isProcessingVoiceRef.current) {
+        if (!isProcessingVoiceRef.current) {
           stopVoiceRecording();
         }
-      }, 10000);
+      }, 4500);
     } catch (e) {
       console.error('Audio recording start failed:', e);
       setIsRecording(false);
@@ -314,19 +342,11 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
         recordingTimeoutRef.current = null;
       }
 
-      const rec = recordingRef.current;
-      if (!rec) {
-        setIsRecording(false);
-        isProcessingVoiceRef.current = false;
-        return;
-      }
-
       setIsRecording(false);
       try {
-        await rec.stopAndUnloadAsync();
+        await recorder.stop();
       } catch (e) {}
-      const uri = rec.getURI();
-      recordingRef.current = null;
+      const uri = recorder.uri;
 
       if (!uri) {
         isProcessingVoiceRef.current = false;

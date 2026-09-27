@@ -10,11 +10,6 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#00685b"
-    },
     "ios": {
       "supportsTablet": true
     },
@@ -52,7 +47,18 @@
     "plugins": [
       "expo-secure-store",
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-status-bar",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#00685b"
+        }
+      ],
+      "expo-audio",
+      "expo-asset"
     ],
     "extra": {
       "eas": {

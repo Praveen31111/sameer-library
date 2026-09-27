@@ -85,10 +85,15 @@ export async function POST(req: Request) {
         // 3. User-Specific Context (Student or Admin)
         let studentContextStr = "";
         let adminContextStr = "";
+        let myBooking: any = null;
+        let todayAttendance: any = null;
+        let totalDuesAgg: any = { _sum: { dueAmount: 0, paidAmount: 0 } };
+        let pendingApprovalsCount = 0;
+        let todayAttendanceCount = 0;
 
         if (user && (user.role === "STUDENT" || mode === "STUDENT")) {
             try {
-                const myBooking = await prisma.booking.findFirst({
+                myBooking = await prisma.booking.findFirst({
                     where: {
                         studentId: user.id,
                         status: "APPROVED"
@@ -101,7 +106,7 @@ export async function POST(req: Request) {
                     orderBy: { endDate: "desc" }
                 });
 
-                const todayAttendance = await prisma.attendance.findFirst({
+                todayAttendance = await prisma.attendance.findFirst({
                     where: {
                         studentId: user.id,
                         checkInAt: {
@@ -141,16 +146,16 @@ CURRENT LOGGED-IN STUDENT INFO:
 
         if (user && (user.role === "ADMIN" || user.role === "OWNER" || mode === "ADMIN")) {
             try {
-                const totalDuesAgg = await prisma.booking.aggregate({
+                totalDuesAgg = await prisma.booking.aggregate({
                     where: { status: "APPROVED" },
                     _sum: { dueAmount: true, paidAmount: true }
                 });
 
-                const pendingApprovalsCount = await prisma.booking.count({
+                pendingApprovalsCount = await prisma.booking.count({
                     where: { status: "PENDING" }
                 });
 
-                const todayAttendanceCount = await prisma.attendance.count({
+                todayAttendanceCount = await prisma.attendance.count({
                     where: {
                         checkInAt: {
                             gte: new Date(new Date().setHours(0, 0, 0, 0))
@@ -162,8 +167,8 @@ CURRENT LOGGED-IN STUDENT INFO:
 ADMIN / OWNER PRIVILEGED AUDIT DATA:
 - Total Enrolled Students: ${activeBookingsCount}
 - Pending Admissions Needing Approval: ${pendingApprovalsCount}
-- Total Fees Collected: ₹${totalDuesAgg._sum.paidAmount || 0}
-- Total Pending Dues Across Library: ₹${totalDuesAgg._sum.dueAmount || 0}
+- Total Fees Collected: ₹${totalDuesAgg._sum?.paidAmount || 0}
+- Total Pending Dues Across Library: ₹${totalDuesAgg._sum?.dueAmount || 0}
 - Today's Total Student Attendance Count: ${todayAttendanceCount}
 `;
             } catch (adminErr) {
@@ -266,65 +271,247 @@ ${adminContextStr}
             });
         }
 
-        // 6. Check if Gemini API key is available or provide instant live database answer
-        if (!apiKey) {
-            const q = (message || "").toLowerCase();
-            let fallbackReply = "";
-            let userTranscript = audioBase64 ? "Aapka aawaz sawal" : message;
+        // Function to produce rich, dynamic, context-aware responses from live database facts
+        const generateSmartDynamicReply = (queryText: string, isVoiceAudio: boolean) => {
+            const q = (queryText || "").toLowerCase().trim();
 
-            if (q.includes("fee") || q.includes("price") || q.includes("charge") || q.includes("paisa") || q.includes("kitna")) {
-                fallbackReply = `Sameer Library me monthly seat fee abhi ₹${effectivePrice} hai. Isme AC study hall, 5G Wi-Fi aur RO drinking water shaamil hai.`;
-            } else if (q.includes("seat") || q.includes("room") || q.includes("khali") || q.includes("available")) {
-                fallbackReply = `Sameer Library me lagbhag ${availableSeatsEstimate} seats uplabdh hain. Aap Book tab se apni pasandida seat chun sakte hain.`;
-            } else if (q.includes("wifi") || q.includes("wi-fi") || q.includes("password") || q.includes("internet")) {
-                fallbackReply = `Sameer Library me 5G high-speed optical fiber Wi-Fi sabhi enrolled students ke liye bilkul free uplabdh hai.`;
-            } else if (q.includes("time") || q.includes("timing") || q.includes("shift") || q.includes("kab")) {
-                fallbackReply = `Sameer Library me teen shifts uplabdh hain: Morning (8 AM to 2 PM), Evening (2 PM to 8 PM) aur Full Day (8 AM to 10 PM).`;
-            } else if (q.includes("rule") || q.includes("niyam")) {
-                fallbackReply = `Library me strict pin-drop silence banaye rakhein, mobile phones silent rakhein aur khana keval break zone me khayein.`;
-            } else if (user && (user.role === "STUDENT" || mode === "STUDENT")) {
-                fallbackReply = `Aapki admission details database me active hain. Kisi bhi sahayata ke liye aap library counter se sampark kar sakte hain.`;
-            } else {
-                fallbackReply = `Namaste! Sameer Library me aapka swagat hai. Hamare yahan monthly fee ₹${effectivePrice} hai aur AC silent study rooms uplabdh hain.`;
+            // --- ADMIN / OWNER INTENTS ---
+            if (user && (user.role === "ADMIN" || user.role === "OWNER" || mode === "ADMIN")) {
+                if (q.includes("attendance") || q.includes("aaye") || q.includes("present") || q.includes("bache") || q.includes("aaj")) {
+                    return {
+                        reply: `Sir, aaj library me kul ${todayAttendanceCount} students ne attendance punch kiya hai.`,
+                        actionType: "GENERAL"
+                    };
+                }
+                if (q.includes("due") || q.includes("baki") || q.includes("recovery") || q.includes("pending fee")) {
+                    return {
+                        reply: `Sir, library ke sabhi active students ka kul pending due balance ₹${totalDuesAgg._sum.dueAmount || 0} hai. Total collection ₹${totalDuesAgg._sum.paidAmount || 0} ho chuka hai.`,
+                        actionType: "PAY_DUES"
+                    };
+                }
+                if (q.includes("admission") || q.includes("approval") || q.includes("request") || q.includes("pending")) {
+                    return {
+                        reply: `Sir, abhi ${pendingApprovalsCount} new seat booking requests admin approval ke liye pending hain.`,
+                        actionType: "GENERAL"
+                    };
+                }
+                if (q.includes("seat") || q.includes("khali") || q.includes("vacant") || q.includes("capacity")) {
+                    return {
+                        reply: `Sir, kul capacity ${totalSeats} seats ki hai, jisme se lagbhag ${availableSeatsEstimate} seats abhi khali hain aur ${activeBookingsCount} active admissions hain.`,
+                        actionType: "BOOK_SEAT"
+                    };
+                }
+                if (q.includes("revenue") || q.includes("collection") || q.includes("kamai") || q.includes("paisa")) {
+                    return {
+                        reply: `Sir, ab tak kul ₹${totalDuesAgg._sum.paidAmount || 0} fee collect hui hai aur ₹${totalDuesAgg._sum.dueAmount || 0} dues pending hain.`,
+                        actionType: "GENERAL"
+                    };
+                }
             }
 
+            // --- STUDENT SPECIFIC INTENTS ---
+            if (user && (user.role === "STUDENT" || mode === "STUDENT")) {
+                if (q.includes("seat") || q.includes("number") || q.includes("mera seat") || q.includes("kaha")) {
+                    if (myBooking?.seat) {
+                        return {
+                            reply: `${user.name} ji, aapki reserved seat ${myBooking.room?.name || "Main AC Hall"} me Seat Number ${myBooking.seat.seatNumber} hai (${myBooking.branch?.name || "Main Branch"}).`,
+                            actionType: "BOOK_SEAT"
+                        };
+                    } else {
+                        return {
+                            reply: `${user.name} ji, abhi aapka koi approved seat active nahi hai. Aap Book tab se nayi seat chun sakte hain.`,
+                            actionType: "BOOK_SEAT"
+                        };
+                    }
+                }
+                if (q.includes("due") || q.includes("fee") || q.includes("baki") || q.includes("balance") || q.includes("paisa")) {
+                    if (myBooking) {
+                        if (myBooking.dueAmount > 0) {
+                            return {
+                                reply: `${user.name} ji, aapka ₹${myBooking.dueAmount} pending due balance hai. Aapne ₹${myBooking.paidAmount} jama kiya hai. Kripya counter par ya online pay karein.`,
+                                actionType: "PAY_DUES"
+                            };
+                        } else {
+                            return {
+                                reply: `Badhai ho ${user.name} ji! Aapka koi pending due nahi hai. Aapki monthly fees fully paid hai.`,
+                                actionType: "GENERAL"
+                            };
+                        }
+                    }
+                }
+                if (q.includes("valid") || q.includes("expiry") || q.includes("kab tak") || q.includes("date")) {
+                    if (myBooking?.endDate) {
+                        const dateStr = new Date(myBooking.endDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+                        return {
+                            reply: `${user.name} ji, aapki library membership ${dateStr} tak valid hai.`,
+                            actionType: "GENERAL"
+                        };
+                    }
+                }
+                if (q.includes("attendance") || q.includes("punch") || q.includes("aaj") || q.includes("haziri")) {
+                    if (todayAttendance) {
+                        const inTime = new Date(todayAttendance.checkInAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+                        const outTime = todayAttendance.checkOutAt ? new Date(todayAttendance.checkOutAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : null;
+                        return {
+                            reply: `${user.name} ji, aaj aapki attendance marked hai! Check-in: ${inTime}${outTime ? `, Check-out: ${outTime}` : " (Active inside library)"}.`,
+                            actionType: "GENERAL"
+                        };
+                    } else {
+                        return {
+                            reply: `${user.name} ji, aaj aapne abhi tak attendance punch nahi kiya hai. Entrance Gate QR scan karke attendance mark kar lein.`,
+                            actionType: "GENERAL"
+                        };
+                    }
+                }
+            }
+
+            // --- GENERAL / PUBLIC INQUIRY INTENTS ---
+            if (q.includes("fee") || q.includes("price") || q.includes("charge") || q.includes("kitna") || q.includes("discount") || q.includes("rate")) {
+                const discountText = pricing.discountActive ? ` (Special discount offer chal raha hai: ${pricing.discountPercent}% OFF!)` : "";
+                return {
+                    reply: `Sameer Library me monthly fee ₹${effectivePrice} per month hai${discountText}. Isme AC study hall, 5G Wi-Fi aur RO drinking water shaamil hai.`,
+                    actionType: "BOOK_SEAT"
+                };
+            }
+            if (q.includes("seat") || q.includes("khali") || q.includes("available") || q.includes("room")) {
+                return {
+                    reply: `Sameer Library me abhi lagbhag ${availableSeatsEstimate} seats uplabdh hain. Sabhi seats par comfortable cushion chairs aur laptop charging sockets diye gaye hain.`,
+                    actionType: "BOOK_SEAT"
+                };
+            }
+            if (q.includes("wifi") || q.includes("internet") || q.includes("password") || q.includes("speed")) {
+                return {
+                    reply: `Sameer Library me high-speed 5G optical fiber Wi-Fi sabhi enrolled students ke liye bilkul free uplabdh hai. Counter se Wi-Fi connect kar sakte hain.`,
+                    actionType: "GENERAL"
+                };
+            }
+            if (q.includes("time") || q.includes("timing") || q.includes("shift") || q.includes("khulta") || q.includes("band")) {
+                return {
+                    reply: `Sameer Library me 3 shifts hain: Morning (8:00 AM to 2:00 PM), Evening (2:00 PM to 8:00 PM) aur Full Day (8:00 AM to 10:00 PM). Sunday ko bhi open rehti hai.`,
+                    actionType: "GENERAL"
+                };
+            }
+            if (q.includes("facility") || q.includes("suvidha") || q.includes("ac") || q.includes("ro") || q.includes("power") || q.includes("inverter")) {
+                return {
+                    reply: `Library me Silent AC Rooms, Inverter/Generator Power Backup, 5G Wi-Fi, RO Water, Personal Charging Points, Separate Washrooms aur 24x7 CCTV security uplabdh hai.`,
+                    actionType: "GENERAL"
+                };
+            }
+            if (q.includes("rule") || q.includes("niyam") || q.includes("discipline") || q.includes("khana") || q.includes("phone")) {
+                return {
+                    reply: `Library ke niyam: Reading hall me pin-drop silence banaye rakhein, mobile silent mode par rakhein aur lunch sirf designated break zone me karein.`,
+                    actionType: "GENERAL"
+                };
+            }
+            if (q.includes("book") || q.includes("admission") || q.includes("join") || q.includes("kaise") || q.includes("register")) {
+                return {
+                    reply: `Admission lene ke liye app me 'Book Seat' par jayein, branch aur manpasand seat select karein aur form submit karein. Admin turant seat approve kar dega.`,
+                    actionType: "BOOK_SEAT"
+                };
+            }
+            if (q.includes("branch") || q.includes("address") || q.includes("kaha") || q.includes("location") || q.includes("patna")) {
+                return {
+                    reply: `Sameer Library ki branches: ${branches.map(b => `${b.name} (${b.address || b.city})`).join(", ") || "Main Branch"}. Kisi bhi branch me visit kar sakte hain.`,
+                    actionType: "GENERAL"
+                };
+            }
+            if (q.includes("exam") || q.includes("upsc") || q.includes("bpsc") || q.includes("ssc") || q.includes("neet") || q.includes("jee") || q.includes("padhai") || q.includes("focus")) {
+                return {
+                    reply: `Sameer Library competitive exams ki taiyari ke liye best shaant vatavaran deta hai. Daily routine aur regular self-study se safalta zaroor milegi! All the best!`,
+                    actionType: "GENERAL"
+                };
+            }
+
+            // Default warm welcome response
+            if (user && (user.role === "STUDENT" || mode === "STUDENT")) {
+                return {
+                    reply: `Namaste ${user.name} ji! Main Sameer AI hoon. Aap apni seat, pending fee, valid date ya library rules ke bare me mujhse puch sakte hain.`,
+                    actionType: "GENERAL"
+                };
+            }
+            if (user && (user.role === "ADMIN" || mode === "ADMIN")) {
+                return {
+                    reply: `Namaste Admin Sir! Aaj ${todayAttendanceCount} students present hain aur ₹${totalDuesAgg._sum.dueAmount || 0} dues pending hain. Main kis audit me madad karu?`,
+                    actionType: "GENERAL"
+                };
+            }
+            return {
+                reply: `Namaste! Sameer Library me aapka swagat hai. Hamare yahan monthly fee ₹${effectivePrice} hai aur ${availableSeatsEstimate} seats uplabdh hain. AC silent rooms aur 5G Wi-Fi ki suvidha uplabdh hai.`,
+                actionType: "BOOK_SEAT"
+            };
+        };
+
+        // Check if Gemini API key is valid (Google AI Studio keys start with AIzaSy)
+        const isKeyValid = apiKey && typeof apiKey === "string" && apiKey.startsWith("AIzaSy") && apiKey.length > 25;
+
+        // If no valid Gemini API key is configured, use our intelligent database-grounded engine
+        if (!isKeyValid) {
+            const resolved = generateSmartDynamicReply(message || (audioBase64 ? "voice inquiry" : ""), !!audioBase64);
             return NextResponse.json({
                 success: true,
-                reply: fallbackReply,
-                userTranscript: userTranscript || undefined,
-                actionType: q.includes("seat") || q.includes("book") ? "BOOK_SEAT" : "GENERAL",
+                reply: resolved.reply,
+                userTranscript: audioBase64 ? (message || "Aapka voice sawal") : message,
+                actionType: resolved.actionType,
                 userName: user?.name || "Student",
+                mode: "dynamic_db_engine",
             });
         }
 
-        // Call Google Gemini API (gemini-flash-latest)
-        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`;
-        
-        const geminiRes = await fetch(geminiUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                system_instruction: {
-                    parts: [{ text: systemInstruction }]
-                },
-                contents,
-                generationConfig: {
-                    temperature: 0.7,
-                    maxOutputTokens: 250,
-                    topP: 0.9,
+        // Call Google Gemini API (tries 2.0 Flash then 1.5 Flash) with fallback to Smart Engine
+        const modelsToTry = [
+            "gemini-2.0-flash",
+            "gemini-1.5-flash",
+        ];
+
+        let geminiData: any = null;
+        let successfulModel = "";
+
+        for (const modelName of modelsToTry) {
+            try {
+                const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 6500);
+
+                const geminiRes = await fetch(geminiUrl, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    signal: controller.signal,
+                    body: JSON.stringify({
+                        system_instruction: {
+                            parts: [{ text: systemInstruction }]
+                        },
+                        contents,
+                        generationConfig: {
+                            temperature: 0.4,
+                            maxOutputTokens: 150,
+                            topP: 0.85,
+                        }
+                    })
+                });
+                clearTimeout(timeoutId);
+                const data = await geminiRes.json();
+                if (data && !data.error && data.candidates?.[0]?.content?.parts) {
+                    geminiData = data;
+                    successfulModel = modelName;
+                    break;
+                } else if (data?.error) {
+                    console.warn(`Gemini ${modelName} returned error:`, data.error?.message);
                 }
-            })
-        });
+            } catch (err: any) {
+                console.warn(`Gemini ${modelName} call exception:`, err?.message);
+            }
+        }
 
-        const geminiData = await geminiRes.json();
-
-        if (geminiData.error) {
-            console.error("Gemini API error in route:", geminiData.error);
-            // Fallback smart response if rate limit or network glitch
-            const fallbackReply = `Namaste! Sameer Library me monthly fee abhi ₹${effectivePrice} hai aur AC rooms me seats available hain. Wi-Fi aur RO water ki suvidha uplabdh hai. Aap app ke Book tab se turant seat book kar sakte hain.`;
+        // If Gemini API fails or runs out of quota, fallback to our Smart Dynamic DB Engine
+        if (!geminiData || geminiData.error) {
+            console.warn("Gemini API not responding, using Smart Dynamic DB Engine fallback");
+            const resolved = generateSmartDynamicReply(message || "", !!audioBase64);
             return NextResponse.json({
                 success: true,
-                reply: fallbackReply,
+                reply: resolved.reply,
+                userTranscript: audioBase64 ? "Voice audio" : message,
+                actionType: resolved.actionType,
+                userName: user?.name || "Student",
                 fallback: true,
             });
         }
@@ -370,6 +557,7 @@ ${adminContextStr}
             userTranscript: userTranscript || undefined,
             actionType,
             userName: user?.name || "Student",
+            modelUsed: successfulModel,
         });
 
     } catch (error: any) {

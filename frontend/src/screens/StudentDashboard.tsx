@@ -2143,7 +2143,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
           <View style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
             <CameraView
               ref={cameraRef}
-              style={StyleSheet.absoluteFillObject}
+              style={StyleSheet.absoluteFill}
               facing={cameraFacing}
               barcodeScannerSettings={{
                 barcodeTypes: ["qr"],
@@ -2154,7 +2154,11 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
             {scannerStep === 'QR' ? (
               /* Step 1: QR Target Reticle Overlay */
               <View style={{
-                ...StyleSheet.absoluteFillObject,
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
                 alignItems: 'center',
                 justifyContent: 'center',
                 backgroundColor: 'rgba(0,0,0,0.45)'
@@ -2206,7 +2210,11 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ onNavigate }
             ) : (
               /* Step 2: Front Camera Live Selfie Verification Overlay */
               <View style={{
-                ...StyleSheet.absoluteFillObject,
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
                 justifyContent: 'space-between',
                 paddingVertical: 30,
                 backgroundColor: 'rgba(0,0,0,0.25)'

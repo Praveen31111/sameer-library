@@ -54,7 +54,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigate }) => {
       }
     } else if (response?.type === 'error') {
       setLoading(false);
-      Alert.alert('Google Sign-In Error', response.error?.message || 'Sign-In failed. Please try again.');
+      Alert.alert('Google Sign-In Error', (response.error as any)?.message || 'Sign-In failed. Please try again.');
     } else if (response?.type === 'dismiss' || response?.type === 'cancel') {
       setLoading(false);
     }
