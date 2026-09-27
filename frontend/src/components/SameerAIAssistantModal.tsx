@@ -64,6 +64,7 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
 
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recordingTimeoutRef = useRef<any>(null);
+  const meteringIntervalRef = useRef<any>(null);
   const activeAudioPlayerRef = useRef<AudioPlayer | null>(null);
   const handsFreeModeRef = useRef(true);
   const visibleRef = useRef(visible);
@@ -89,6 +90,10 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
       if (recordingTimeoutRef.current) {
         clearTimeout(recordingTimeoutRef.current);
         recordingTimeoutRef.current = null;
+      }
+      if (meteringIntervalRef.current) {
+        clearInterval(meteringIntervalRef.current);
+        meteringIntervalRef.current = null;
       }
       if (recorder.isRecording) {
         try {
@@ -213,7 +218,7 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
   };
 
   // Speak AI Text using Cloned Real Voice (or fallback to native TTS)
-  const speakText = async (text: string, onSpeechFinished?: () => void) => {
+  const speakText = async (text: string, onSpeechFinished?: () => void, directAudioUrl?: string) => {
     try {
       if (voiceMuted) {
         onSpeechFinished?.();
@@ -231,7 +236,42 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
       setIsSpeaking(true);
       const speechContent = text.replace(/[\*\#\_]/g, '').trim();
 
-      // 1. Try to fetch synthesized cloned voice audio from backend /ai/voice
+      // 1. Instant single-roundtrip audio playback if directAudioUrl provided by backend
+      if (directAudioUrl) {
+        try {
+          let audioPlayUri = directAudioUrl;
+          if (directAudioUrl.startsWith('data:audio')) {
+            const base64Data = directAudioUrl.split(',')[1] || directAudioUrl;
+            const tempFile = `${FileSystem.cacheDirectory}sameer_director_${Date.now()}.mp3`;
+            await FileSystem.writeAsStringAsync(tempFile, base64Data, {
+              encoding: FileSystem.EncodingType.Base64,
+            });
+            audioPlayUri = tempFile;
+          } else if (!directAudioUrl.startsWith('http')) {
+            const baseUrl = API_URL.replace(/\/api\/?$/, '');
+            audioPlayUri = `${baseUrl}${directAudioUrl}`;
+          }
+
+          const player = createAudioPlayer(audioPlayUri);
+          activeAudioPlayerRef.current = player;
+
+          (player as any).addListener('playbackStatusUpdate', (status: any) => {
+            if (status?.didJustFinish) {
+              setIsSpeaking(false);
+              try { player.remove(); } catch (e) {}
+              activeAudioPlayerRef.current = null;
+              onSpeechFinished?.();
+            }
+          });
+
+          player.play();
+          return;
+        } catch (directPlayErr) {
+          console.warn('Direct audio play issue, trying backend fetch fallback:', directPlayErr);
+        }
+      }
+
+      // 2. Secondary fallback to /ai/voice if directAudioUrl wasn't included
       try {
         const voiceRes = await apiRequest('/ai/voice', {
           method: 'POST',
@@ -271,7 +311,7 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
         console.warn('Voice clone fetch note, using local TTS:', voiceFetchErr);
       }
 
-      // 2. Seamless local TTS fallback
+      // 3. Seamless local TTS fallback
       Speech.speak(speechContent, {
         language: 'hi-IN',
         pitch: 1.0,
@@ -328,13 +368,31 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
       recorder.record();
       setIsRecording(true);
 
-      // Fast safety timeout: 4.5 seconds fallback (normal question is 2-3s)
+      if (meteringIntervalRef.current) clearInterval(meteringIntervalRef.current);
+      meteringIntervalRef.current = setInterval(() => {
+        try {
+          const status = recorder.getStatus();
+          if (status?.isRecording && status.metering !== undefined) {
+            if (status.metering > -38) {
+              speechStartedRef.current = true;
+              silenceMsRef.current = 0;
+            } else if (speechStartedRef.current) {
+              silenceMsRef.current += 120;
+              if (silenceMsRef.current >= 950 && !isProcessingVoiceRef.current) {
+                stopVoiceRecording();
+              }
+            }
+          }
+        } catch (e) {}
+      }, 120);
+
+      // Fast safety timeout: 2.8 seconds fallback (normal question is 1.5-2s)
       if (recordingTimeoutRef.current) clearTimeout(recordingTimeoutRef.current);
       recordingTimeoutRef.current = setTimeout(() => {
         if (!isProcessingVoiceRef.current) {
           stopVoiceRecording();
         }
-      }, 4500);
+      }, 2800);
     } catch (e) {
       console.error('Audio recording start failed:', e);
       setIsRecording(false);
@@ -343,6 +401,11 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
 
   // Stop Voice Recording and Send to Gemini
   const stopVoiceRecording = async () => {
+    if (meteringIntervalRef.current) {
+      clearInterval(meteringIntervalRef.current);
+      meteringIntervalRef.current = null;
+    }
+
     if (isProcessingVoiceRef.current) return;
     isProcessingVoiceRef.current = true;
 
@@ -370,7 +433,6 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
         const audioFile = new File(uri);
         base64Audio = await audioFile.base64();
       } catch (fileErr) {
-        // Fallback to legacy FileSystem module
         base64Audio = await FileSystem.readAsStringAsync(uri, {
           encoding: FileSystem.EncodingType?.Base64 || 'base64',
         });
@@ -380,16 +442,17 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
         throw new Error('Recorded audio could not be converted to base64');
       }
 
-      const fileExt = uri.split('.').pop()?.toLowerCase();
-      const detectedMimeType = fileExt === 'mp4' || fileExt === 'm4a' ? 'audio/mp4' : 'audio/m4a';
-
       const res = await apiRequest('/ai/chat', {
         method: 'POST',
         body: JSON.stringify({
           audioBase64: base64Audio,
-          mimeType: detectedMimeType,
+          mimeType: 'audio/m4a',
           mode,
-          conversationHistory: messages.slice(-4),
+          wantVoice: !voiceMuted,
+          conversationHistory: messages.slice(-4).map((m) => ({
+            role: m.sender === 'user' ? 'user' : 'model',
+            content: m.text,
+          })),
         }),
       });
 
@@ -416,20 +479,24 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
         setActiveSuggestions(res.suggestedQuestions);
       }
 
-      // Automatically speak the response and resume listening if handsFreeMode is active!
-      speakText(aiReply, () => {
-        if (handsFreeModeRef.current && visibleRef.current) {
-          autoListenTimerRef.current = setTimeout(() => {
-            startVoiceRecording();
-          }, 600);
-        }
-      });
+      // Automatically speak the response using directAudioUrl from chat response (0 extra round-trip network delays!)
+      speakText(
+        aiReply,
+        () => {
+          if (handsFreeModeRef.current && visibleRef.current) {
+            autoListenTimerRef.current = setTimeout(() => {
+              startVoiceRecording();
+            }, 600);
+          }
+        },
+        res?.audioUrl
+      );
     } catch (err: any) {
       console.warn('Voice send error:', err);
       const errorMsg: SameerAIMessage = {
         id: `err-${Date.now()}`,
         sender: 'ai',
-        text: 'Aapki aawaz theek se sunai nahi di. Kripya dobara boliye.',
+        text: 'Aapki aawaz theek se sunai nahi di. Kripya dobara boliye ya quick chip par tap karein.',
         timestamp: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }),
       };
       setMessages((prev) => [...prev, errorMsg]);
@@ -471,7 +538,11 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
         body: JSON.stringify({
           message: query,
           mode,
-          conversationHistory: messages.slice(-4),
+          wantVoice: !voiceMuted,
+          conversationHistory: messages.slice(-4).map((m) => ({
+            role: m.sender === 'user' ? 'user' : 'model',
+            content: m.text,
+          })),
         }),
       });
 
@@ -490,7 +561,7 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
         setActiveSuggestions(res.suggestedQuestions);
       }
 
-      speakText(aiReply);
+      speakText(aiReply, undefined, res?.audioUrl);
     } catch (err: any) {
       console.error('AI chat query error:', err);
       const errorMsg: SameerAIMessage = {
@@ -623,12 +694,12 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
               />
               <Text style={[styles.visualizerStatusText, isRecording && { color: '#fca5a5', fontWeight: '700' }]}>
                 {isRecording
-                  ? (handsFreeMode ? '🎙️ Sun raha hoon... Boliye (Rukte hi answer milega)' : '🎙️ Sun raha hoon... Boliye')
+                  ? '🎙️ Sun raha hoon... Boliye (Rukte hi ya Mic dabate hi turant jawab)'
                   : isSpeaking
-                  ? 'Sameer AI bol raha hai...'
+                  ? '🔊 Sameer AI bol raha hai...'
                   : isThinking
-                  ? 'Sameer AI soch raha hai...'
-                  : (handsFreeMode ? '🔄 Hands-Free Call ON: Bolna shuru karein' : 'Puchiye ya Mic dabakar boliye')}
+                  ? '⚡ Sameer AI turant jawab la raha hai...'
+                  : (handsFreeMode ? '🔄 Auto-Voice ON: Bolna shuru karein' : 'Puchiye ya Mic dabakar boliye')}
               </Text>
             </View>
 
@@ -791,8 +862,8 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
               ]}
             >
               <Ionicons
-                name={isRecording ? 'stop' : 'mic'}
-                size={21}
+                name={isRecording ? 'stop-circle' : 'mic'}
+                size={isRecording ? 24 : 21}
                 color="#ffffff"
               />
             </TouchableOpacity>
@@ -801,7 +872,7 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
               style={[styles.textInput, isRecording && { borderColor: '#ef4444', borderWidth: 1 }]}
               placeholder={
                 isRecording
-                  ? '🎙️ Sun raha hoon... Boliye'
+                  ? '🎙️ Sun raha hoon... (Mic dabakar turant bhejein)'
                   : isSpeaking
                   ? '🔊 Sameer AI bol raha hai...'
                   : handsFreeMode

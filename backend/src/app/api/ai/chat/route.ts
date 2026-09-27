@@ -1,10 +1,51 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { MsEdgeTTS, OUTPUT_FORMAT } from "msedge-tts";
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 30;
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+
+// In-memory voice audio cache for lightning-fast (0ms) response on common queries
+const voiceAudioCache = new Map<string, string>();
+
+async function synthesizeDirectVoice(text: string): Promise<string | null> {
+    try {
+        const cleanText = text.replace(/[\*\#\_]/g, '').replace(/https?:\/\/\S+/g, '').trim();
+        if (!cleanText) return null;
+
+        if (voiceAudioCache.has(cleanText)) {
+            return voiceAudioCache.get(cleanText)!;
+        }
+
+        const tts = new MsEdgeTTS();
+        await tts.setMetadata("hi-IN-MadhurNeural", OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
+        const { audioStream } = tts.toStream(cleanText);
+
+        const chunks: Buffer[] = [];
+        await new Promise<void>((resolve, reject) => {
+            audioStream.on("data", (chunk: Buffer) => chunks.push(chunk));
+            audioStream.on("end", () => resolve());
+            audioStream.on("error", (err: any) => reject(err));
+        });
+
+        const audioBuffer = Buffer.concat(chunks);
+        const base64Audio = `data:audio/mp3;base64,${audioBuffer.toString("base64")}`;
+
+        if (voiceAudioCache.size > 120) {
+            const firstKey = voiceAudioCache.keys().next().value;
+            if (firstKey) voiceAudioCache.delete(firstKey);
+        }
+        voiceAudioCache.set(cleanText, base64Audio);
+
+        return base64Audio;
+    } catch (err) {
+        console.warn("Direct voice synthesis warning:", err);
+        return null;
+    }
+}
 
 // Fallback pricing if DB key missing
 const DEFAULT_PRICING = {
@@ -20,7 +61,7 @@ export async function POST(req: Request) {
         const apiKey = process.env.GEMINI_API_KEY || GEMINI_API_KEY;
 
         const body = await req.json();
-        const { message, audioBase64, mimeType, mode, conversationHistory } = body;
+        const { message, audioBase64, mimeType, mode, conversationHistory, wantVoice } = body;
 
         if ((!message || typeof message !== "string" || message.trim().length === 0) && !audioBase64) {
             return NextResponse.json({
@@ -241,10 +282,12 @@ SUGGESTIONS: <question 1> | <question 2> | <question 3>
         // Append recent conversation history if provided
         if (Array.isArray(conversationHistory) && conversationHistory.length > 0) {
             conversationHistory.slice(-4).forEach((msg: any) => {
-                if (msg.role === "user" || msg.role === "model" || msg.role === "assistant") {
+                const role = msg.role || (msg.sender === "user" ? "user" : "model");
+                const text = String(msg.content || msg.text || "").trim();
+                if (text && (role === "user" || role === "model" || role === "assistant")) {
                     contents.push({
-                        role: msg.role === "assistant" ? "model" : msg.role,
-                        parts: [{ text: String(msg.content || msg.text || "") }]
+                        role: role === "assistant" ? "model" : role,
+                        parts: [{ text }]
                     });
                 }
             });
@@ -262,7 +305,7 @@ SUGGESTIONS: <question 1> | <question 2> | <question 3>
                         }
                     },
                     {
-                        text: "A student just asked this question to Sameer AI. In your response:\nTRANSCRIPT: <exact short transcript in Hindi/English>\nANSWER: <your 2-3 sentence spoken friendly buddy reply>\nSUGGESTIONS: <short question 1> | <short question 2> | <short question 3>"
+                        text: "A student just spoke this voice question to Sameer AI (Library Buddy). Listen carefully to their Hindi, Hinglish, or English speech.\nEven if casual, soft, or with background noise, extract the question and answer warmly as Sameer AI in 2-3 spoken sentences.\n\nRequired Format:\nTRANSCRIPT: <Hindi or Hinglish transcript of student query>\nANSWER: <2-3 sentence spoken friendly buddy reply>\nSUGGESTIONS: <question 1> | <question 2> | <question 3>\n\nIf the audio is completely silent or no speech was detected, respond with:\nTRANSCRIPT: (Aawaz saf nahi aayi)\nANSWER: Arrey bhai, aapki aawaz theek se nahi sunai di! Ek bar thoda paas aakar boliye, main sun raha hoon 😄\nSUGGESTIONS: 🚻 Toilet hai kya? | 💰 Monthly fees kitni hai? | 🕒 Library timings?"
                     }
                 ]
             });
@@ -614,7 +657,7 @@ SUGGESTIONS: <question 1> | <question 2> | <question 3>
             try {
                 const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 6500);
+                const timeoutId = setTimeout(() => controller.abort(), 10000);
 
                 const geminiRes = await fetch(geminiUrl, {
                     method: "POST",
@@ -626,8 +669,8 @@ SUGGESTIONS: <question 1> | <question 2> | <question 3>
                         },
                         contents,
                         generationConfig: {
-                            temperature: 0.5,
-                            maxOutputTokens: 220,
+                            temperature: 0.45,
+                            maxOutputTokens: 250,
                             topP: 0.85,
                         }
                     })
@@ -646,16 +689,42 @@ SUGGESTIONS: <question 1> | <question 2> | <question 3>
             }
         }
 
-        // If Gemini API fails or runs out of quota, fallback to our Smart Dynamic DB Engine
+        // If Gemini API fails or runs out of quota, fallback cleanly
         if (!geminiData || geminiData.error) {
             console.warn("Gemini API not responding, using Smart Dynamic DB Engine fallback");
-            const resolved = generateSmartDynamicReply(message || "", !!audioBase64);
+
+            if (audioBase64) {
+                const voiceFallbackReply = "Aapki aawaz theek se nahi sunai di ya network thoda slow hai. Ek bar dobara boliye ya niche diye option par tap kijiye! 😄";
+                const directAudio = await synthesizeDirectVoice(voiceFallbackReply);
+                return NextResponse.json({
+                    success: true,
+                    reply: voiceFallbackReply,
+                    userTranscript: "(Aawaz saf nahi aayi)",
+                    actionType: "GENERAL",
+                    suggestedQuestions: [
+                        "🚻 Toilet facility hai?",
+                        "💰 Monthly fee kitni hai?",
+                        "🪑 Seat availability?",
+                        "🕒 Library timings kya hain?"
+                    ],
+                    audioUrl: directAudio || undefined,
+                    userName: user?.name || "Student",
+                    fallback: true,
+                });
+            }
+
+            const resolved = generateSmartDynamicReply(message || "", false);
+            let directAudio: string | null = null;
+            if (wantVoice) {
+                directAudio = await synthesizeDirectVoice(resolved.reply);
+            }
             return NextResponse.json({
                 success: true,
                 reply: resolved.reply,
-                userTranscript: audioBase64 ? "Voice audio" : message,
+                userTranscript: message,
                 actionType: resolved.actionType,
                 suggestedQuestions: resolved.suggestions,
+                audioUrl: directAudio || undefined,
                 userName: user?.name || "Student",
                 fallback: true,
             });
@@ -719,12 +788,22 @@ SUGGESTIONS: <question 1> | <question 2> | <question 3>
             ? "PAY_DUES"
             : "GENERAL";
 
+        // Synthesize single-roundtrip Indian Male Director voice audio (0 extra network calls!)
+        let directAudioUrl: string | undefined = undefined;
+        if (audioBase64 || wantVoice) {
+            const synth = await synthesizeDirectVoice(reply);
+            if (synth) {
+                directAudioUrl = synth;
+            }
+        }
+
         return NextResponse.json({
             success: true,
             reply,
             userTranscript: userTranscript || (audioBase64 ? "Aapka voice sandesh" : undefined),
             actionType,
             suggestedQuestions,
+            audioUrl: directAudioUrl,
             userName: user?.name || "Student",
             modelUsed: successfulModel,
         });
