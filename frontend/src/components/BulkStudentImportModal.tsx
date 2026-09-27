@@ -23,6 +23,7 @@ interface ParsedStudentRow {
   id: string;
   name: string;
   phone: string;
+  email?: string;
   seatNumber?: string;
   shift?: string;
   totalFee: number;
@@ -40,12 +41,12 @@ interface BulkStudentImportModalProps {
   onImportSuccess?: () => void;
 }
 
-const SAMPLE_CSV_DATA = `Name,Phone,Seat,Shift,TotalFee,PaidAmount,DueAmount,College
-Rahul Kumar,9876543210,A1,FULL_DAY,1000,1000,0,Science College
-Priya Sharma,9811223344,B4,MORNING,1000,800,200,Patna University
-Amit Singh,9899001122,C2,EVENING,1000,500,500,AN College
-Sneha Verma,9700112233,A5,FULL_DAY,1000,1000,0,Women's College
-Vikram Yadav,9655443322,B1,FULL_DAY,1000,0,1000,Commerce College`;
+const SAMPLE_CSV_DATA = `Name,Phone,Email,Seat,Shift,TotalFee,PaidAmount,DueAmount,College
+Rahul Kumar,9876543210,rahul.kumar@gmail.com,A1,FULL_DAY,1000,1000,0,Science College
+Priya Sharma,9811223344,priya.sharma@gmail.com,B4,MORNING,1000,800,200,Patna University
+Amit Singh,9899001122,amit.upsc@gmail.com,C2,EVENING,1000,500,500,AN College
+Sneha Verma,9700112233,sneha.verma@gmail.com,A5,FULL_DAY,1000,1000,0,Women's College
+Vikram Yadav,9655443322,vikram.yadav@gmail.com,B1,FULL_DAY,1000,0,1000,Commerce College`;
 
 export const BulkStudentImportModal: React.FC<BulkStudentImportModalProps> = ({
   visible,
@@ -74,7 +75,7 @@ export const BulkStudentImportModal: React.FC<BulkStudentImportModalProps> = ({
     try {
       await Share.share({
         title: 'Sameer Library - Bulk Student Import Template',
-        message: `Sameer Library Bulk Student Template (CSV):\n\n${SAMPLE_CSV_DATA}\n\nTip: You can copy this data, open in Excel, add your students, and paste back into the portal.`,
+        message: `Sameer Library Bulk Student Template (CSV):\n\n${SAMPLE_CSV_DATA}\n\nTip: You can copy this data, open in Excel, add your students, and paste back into the portal. Students can later login using their Gmail ID to view their full details!`,
       });
     } catch (e) {
       Alert.alert('Template Data', SAMPLE_CSV_DATA);
@@ -97,6 +98,7 @@ export const BulkStudentImportModal: React.FC<BulkStudentImportModalProps> = ({
     const hasHeader =
       firstLineLower.includes('name') ||
       firstLineLower.includes('phone') ||
+      firstLineLower.includes('email') ||
       firstLineLower.includes('mobile') ||
       firstLineLower.includes('seat');
 
@@ -123,15 +125,35 @@ export const BulkStudentImportModal: React.FC<BulkStudentImportModalProps> = ({
       if (cleanPhone.length === 12 && cleanPhone.startsWith('91')) cleanPhone = cleanPhone.slice(2);
       else if (cleanPhone.length === 11 && cleanPhone.startsWith('0')) cleanPhone = cleanPhone.slice(1);
 
-      const seatNumber = parts[2] ? parts[2].toUpperCase() : undefined;
-      const rawShift = parts[3] ? parts[3].toUpperCase() : 'FULL_DAY';
+      // Smart Email / Gmail ID detection
+      let detectedEmail: string | undefined = undefined;
+      let seatIdx = 2;
+
+      if (parts[2] && parts[2].includes('@')) {
+        detectedEmail = parts[2].toLowerCase().trim();
+        seatIdx = 3;
+      } else {
+        // Also check any other column for an email address
+        for (let c = 1; c < parts.length; c++) {
+          if (parts[c].includes('@') && parts[c].includes('.')) {
+            detectedEmail = parts[c].toLowerCase().trim();
+            break;
+          }
+        }
+      }
+
+      const seatNumber = parts[seatIdx] ? parts[seatIdx].toUpperCase() : undefined;
+      const rawShift = parts[seatIdx + 1] ? parts[seatIdx + 1].toUpperCase() : 'FULL_DAY';
       const shift =
         rawShift.includes('MORN') ? 'MORNING' : rawShift.includes('EVEN') ? 'EVENING' : 'FULL_DAY';
 
-      const totalFee = parts[4] ? Number(parts[4]) || 1000 : 1000;
-      const paidAmount = parts[5] ? Number(parts[5]) || 0 : totalFee;
-      const dueAmount = parts[6] !== undefined && parts[6] !== '' ? Number(parts[6]) || 0 : Math.max(0, totalFee - paidAmount);
-      const college = parts[7] || undefined;
+      const totalFee = parts[seatIdx + 2] ? Number(parts[seatIdx + 2]) || 1000 : 1000;
+      const paidAmount = parts[seatIdx + 3] ? Number(parts[seatIdx + 3]) || 0 : totalFee;
+      const dueAmount =
+        parts[seatIdx + 4] !== undefined && parts[seatIdx + 4] !== ''
+          ? Number(parts[seatIdx + 4]) || 0
+          : Math.max(0, totalFee - paidAmount);
+      const college = parts[seatIdx + 5] || undefined;
 
       const isValidName = name.length >= 2;
       const isValidPhone = cleanPhone.length === 10;
@@ -145,6 +167,7 @@ export const BulkStudentImportModal: React.FC<BulkStudentImportModalProps> = ({
         id: `row-${index}-${Date.now()}`,
         name,
         phone: cleanPhone || rawPhone,
+        email: detectedEmail,
         seatNumber,
         shift,
         totalFee,
@@ -181,6 +204,7 @@ export const BulkStudentImportModal: React.FC<BulkStudentImportModalProps> = ({
           students: validRows.map((r) => ({
             name: r.name,
             phone: r.phone,
+            email: r.email,
             seatNumber: r.seatNumber,
             shift: r.shift,
             totalFee: r.totalFee,
@@ -317,13 +341,13 @@ export const BulkStudentImportModal: React.FC<BulkStudentImportModalProps> = ({
                   style={styles.textArea}
                   multiline
                   numberOfLines={8}
-                  placeholder={`Rahul Kumar, 9876543210, A1, FULL_DAY, 1000, 1000, 0\nPriya Sharma, 9811223344, B4, MORNING, 1000, 800, 200\nAmit Singh, 9899001122, C2, EVENING, 1000, 500, 500`}
+                  placeholder={`Rahul Kumar, 9876543210, rahul.kumar@gmail.com, A1, FULL_DAY, 1000, 1000, 0\nPriya Sharma, 9811223344, priya@gmail.com, B4, MORNING, 1000, 800, 200\nAmit Singh, 9899001122, amit@gmail.com, C2, EVENING, 1000, 500, 500`}
                   placeholderTextColor="#64748b"
                   value={pasteText}
                   onChangeText={setPasteText}
                 />
                 <Text style={styles.inputHelper}>
-                  💡 Excel ya Google Sheets se rows copy karke sidha yahan paste kar sakte hain.
+                  💡 Student ka Gmail ID dalenge to wo app me direct "Sign in with Google" se login karke apna pura detail (seat, fee due, pass) dekh sakega.
                 </Text>
               </View>
 
@@ -401,6 +425,16 @@ export const BulkStudentImportModal: React.FC<BulkStudentImportModalProps> = ({
                         <Text style={[styles.rowPhone, !row.isValid && { color: '#ef4444' }]}>
                           📞 {row.phone}
                         </Text>
+                        {row.email ? (
+                          <View style={styles.gmailPill}>
+                            <Ionicons name="mail" size={11} color="#38bdf8" />
+                            <Text style={styles.gmailPillText} numberOfLines={1}>{row.email}</Text>
+                          </View>
+                        ) : (
+                          <View style={[styles.gmailPill, { backgroundColor: '#33415525', borderColor: '#47556940' }]}>
+                            <Text style={[styles.gmailPillText, { color: '#94a3b8' }]}>✉️ Auto ID</Text>
+                          </View>
+                        )}
                         {row.seatNumber && (
                           <View style={styles.seatPill}>
                             <Text style={styles.seatPillText}>🪑 Seat {row.seatNumber}</Text>
@@ -742,6 +776,23 @@ const styles = StyleSheet.create({
   rowPhone: {
     fontSize: 12,
     color: '#94a3b8',
+  },
+  gmailPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#0284c718',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#0284c735',
+    maxWidth: 190,
+  },
+  gmailPillText: {
+    fontSize: 10,
+    color: '#38bdf8',
+    fontWeight: '600',
   },
   seatPill: {
     backgroundColor: '#0d948820',

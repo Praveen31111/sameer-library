@@ -95,7 +95,8 @@ export async function POST(req: Request) {
                     continue;
                 }
 
-                const email = (raw.email || "").trim() || `${phone}@sameerlibrary.com`;
+                const cleanEmail = (raw.email || "").trim().toLowerCase();
+                const email = cleanEmail || `${phone}@sameerlibrary.com`;
 
                 // 1. Resolve Target Branch
                 let branch = primaryBranch;
@@ -182,9 +183,7 @@ export async function POST(req: Request) {
                     }
                 });
 
-                let isNewUser = false;
                 if (!studentUser) {
-                    isNewUser = true;
                     studentUser = await prisma.user.create({
                         data: {
                             name,
@@ -194,21 +193,40 @@ export async function POST(req: Request) {
                             role: "STUDENT",
                             status: "ACTIVE",
                             phoneVerified: true,
+                            emailVerified: email.includes("@gmail.com") || !!cleanEmail,
                             college: raw.college?.trim() || null,
                             course: raw.course?.trim() || null,
                         }
                     });
                     importedCount++;
                 } else {
-                    // Update existing student profile to active
+                    // Update existing student profile to active and link real Gmail if provided
+                    const updateData: any = {
+                        name,
+                        status: "ACTIVE",
+                        college: raw.college?.trim() || studentUser.college,
+                        course: raw.course?.trim() || studentUser.course,
+                    };
+
+                    if (cleanEmail && studentUser.email !== cleanEmail) {
+                        const emailClash = await prisma.user.findUnique({ where: { email: cleanEmail } });
+                        if (!emailClash || emailClash.id === studentUser.id) {
+                            updateData.email = cleanEmail;
+                            updateData.emailVerified = true;
+                        }
+                    }
+
+                    if (phone && studentUser.phone !== phone) {
+                        const phoneClash = await prisma.user.findUnique({ where: { phone } });
+                        if (!phoneClash || phoneClash.id === studentUser.id) {
+                            updateData.phone = phone;
+                            updateData.phoneVerified = true;
+                        }
+                    }
+
                     studentUser = await prisma.user.update({
                         where: { id: studentUser.id },
-                        data: {
-                            name,
-                            status: "ACTIVE",
-                            college: raw.college?.trim() || studentUser.college,
-                            course: raw.course?.trim() || studentUser.course,
-                        }
+                        data: updateData
                     });
                     updatedCount++;
                 }
@@ -329,6 +347,7 @@ export async function POST(req: Request) {
                 importedStudentsList.push({
                     name: studentUser.name,
                     phone: studentUser.phone,
+                    email: studentUser.email,
                     seatNumber: seat.seatNumber,
                     roomName: room.name,
                     branchName: branch.name,
@@ -347,7 +366,7 @@ export async function POST(req: Request) {
             }
         }
 
-        const sampleWelcomeMessage = `Namaste! Sameer Digital Library me aapka swagat hai. Aapka account activate ho gaya hai.\n\n📲 App Download karein: https://sameer-library-ten.vercel.app\n🔑 Login Mobile: [Aapka Mobile Number]\n🔒 Password: ${defaultPassword}\n\nApni seat, attendance aur fee status app me dekhein. Kisi bhi sahayata ke liye admin se sampark karein.`;
+        const sampleWelcomeMessage = `Namaste! Sameer Digital Library me aapka swagat hai. Aapka account activate ho gaya hai.\n\n📲 App Download karein: https://sameer-library-ten.vercel.app\n✉️ Login Gmail / Email: [Aapka Gmail ID]\n📞 Login Mobile: [Aapka Mobile Number]\n🔒 Password: ${defaultPassword}\n(Aap 'Continue with Google' se bhi direct login kar sakte hain)\n\nApni assigned seat, attendance aur fee status app me dekhein!`;
 
         return NextResponse.json({
             success: true,
