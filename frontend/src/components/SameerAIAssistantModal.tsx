@@ -331,10 +331,17 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
   const startVoiceRecording = async () => {
     try {
       if (isThinking || isProcessingVoiceRef.current || !visibleRef.current) return;
-      if (isSpeaking) {
-        Speech.stop();
-        setIsSpeaking(false);
+
+      // 1. Immediately kill any active speech / audio player
+      if (activeAudioPlayerRef.current) {
+        try {
+          activeAudioPlayerRef.current.pause();
+          activeAudioPlayerRef.current.remove();
+        } catch (e) {}
+        activeAudioPlayerRef.current = null;
       }
+      Speech.stop();
+      setIsSpeaking(false);
 
       if (autoListenTimerRef.current) {
         clearTimeout(autoListenTimerRef.current);
@@ -347,10 +354,20 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
         return;
       }
 
+      // 2. Ensure previous recording session is completely stopped before re-preparing
+      if (recorder.isRecording) {
+        try {
+          await recorder.stop();
+        } catch (e) {}
+      }
+
       await setAudioModeAsync({
         allowsRecording: true,
         playsInSilentMode: true,
       });
+
+      // 3. Small 120ms hardware buffer to allow microphone switch without OS rejection
+      await new Promise((resolve) => setTimeout(resolve, 120));
 
       await recorder.prepareToRecordAsync();
       recorder.record();

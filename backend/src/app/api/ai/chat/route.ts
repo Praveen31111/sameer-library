@@ -21,27 +21,37 @@ async function synthesizeDirectVoice(text: string): Promise<string | null> {
             return voiceAudioCache.get(cleanText)!;
         }
 
-        const tts = new MsEdgeTTS();
-        await tts.setMetadata("hi-IN-MadhurNeural", OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
-        const { audioStream } = tts.toStream(cleanText);
+        const ttsPromise = (async () => {
+            const tts = new MsEdgeTTS();
+            await tts.setMetadata("hi-IN-MadhurNeural", OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
+            const { audioStream } = tts.toStream(cleanText);
 
-        const chunks: Buffer[] = [];
-        await new Promise<void>((resolve, reject) => {
-            audioStream.on("data", (chunk: Buffer) => chunks.push(chunk));
-            audioStream.on("end", () => resolve());
-            audioStream.on("error", (err: any) => reject(err));
-        });
+            const chunks: Buffer[] = [];
+            await new Promise<void>((resolve, reject) => {
+                audioStream.on("data", (chunk: Buffer) => chunks.push(chunk));
+                audioStream.on("end", () => resolve());
+                audioStream.on("error", (err: any) => reject(err));
+            });
 
-        const audioBuffer = Buffer.concat(chunks);
-        const base64Audio = `data:audio/mp3;base64,${audioBuffer.toString("base64")}`;
+            const audioBuffer = Buffer.concat(chunks);
+            return `data:audio/mp3;base64,${audioBuffer.toString("base64")}`;
+        })();
 
-        if (voiceAudioCache.size > 120) {
-            const firstKey = voiceAudioCache.keys().next().value;
-            if (firstKey) voiceAudioCache.delete(firstKey);
+        // 2.2 second race timeout: if network TTS is fast, return director voice.
+        // If slow, resolve null instantly so the student doesn't wait and phone uses native TTS.
+        const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 2200));
+        const base64Audio = await Promise.race([ttsPromise, timeoutPromise]);
+
+        if (base64Audio) {
+            if (voiceAudioCache.size > 120) {
+                const firstKey = voiceAudioCache.keys().next().value;
+                if (firstKey) voiceAudioCache.delete(firstKey);
+            }
+            voiceAudioCache.set(cleanText, base64Audio);
+            return base64Audio;
         }
-        voiceAudioCache.set(cleanText, base64Audio);
 
-        return base64Audio;
+        return null;
     } catch (err) {
         console.warn("Direct voice synthesis warning:", err);
         return null;
@@ -659,7 +669,7 @@ SUGGESTIONS: <question 1> | <question 2> | <question 3>
             try {
                 const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 10000);
+                const timeoutId = setTimeout(() => controller.abort(), 6500);
 
                 const geminiRes = await fetch(geminiUrl, {
                     method: "POST",
@@ -671,8 +681,8 @@ SUGGESTIONS: <question 1> | <question 2> | <question 3>
                         },
                         contents,
                         generationConfig: {
-                            temperature: 0.45,
-                            maxOutputTokens: 250,
+                            temperature: 0.35,
+                            maxOutputTokens: 140,
                             topP: 0.85,
                         }
                     })
