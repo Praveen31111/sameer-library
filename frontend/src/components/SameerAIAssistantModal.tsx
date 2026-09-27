@@ -237,12 +237,20 @@ export const SameerAIAssistantModal: React.FC<SameerAIAssistantModalProps> = ({
         });
 
         if (voiceRes?.success && voiceRes?.audioUrl && !voiceRes.fallbackTts) {
-          const baseUrl = API_URL.replace(/\/api\/?$/, '');
-          const audioUrl = voiceRes.audioUrl.startsWith('http')
-            ? voiceRes.audioUrl
-            : `${baseUrl}${voiceRes.audioUrl}`;
+          let audioPlayUri = voiceRes.audioUrl;
+          if (voiceRes.audioUrl.startsWith('data:audio')) {
+            const base64Data = voiceRes.audioUrl.split(',')[1] || voiceRes.audioUrl;
+            const tempFile = `${FileSystem.cacheDirectory}sameer_director_${Date.now()}.mp3`;
+            await FileSystem.writeAsStringAsync(tempFile, base64Data, {
+              encoding: FileSystem.EncodingType.Base64,
+            });
+            audioPlayUri = tempFile;
+          } else if (!voiceRes.audioUrl.startsWith('http')) {
+            const baseUrl = API_URL.replace(/\/api\/?$/, '');
+            audioPlayUri = `${baseUrl}${voiceRes.audioUrl}`;
+          }
 
-          const player = createAudioPlayer(audioUrl);
+          const player = createAudioPlayer(audioPlayUri);
           activeAudioPlayerRef.current = player;
 
           (player as any).addListener('playbackStatusUpdate', (status: any) => {
