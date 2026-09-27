@@ -1,14 +1,11 @@
 import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import crypto from "crypto";
 
 export const dynamic = 'force-dynamic';
 
 const HUGGINGFACE_TOKEN = process.env.HUGGINGFACE_TOKEN;
-
-// Local sample voice path
-const DEFAULT_SPEAKER_VOICE = path.join(process.cwd(), "public", "voices", "sameer-voice.mp3");
+const VERCEL_PUBLIC_VOICE_URL = "https://sameer-library-ten.vercel.app/voices/sameer-voice.wav";
 
 export async function POST(req: Request) {
     try {
@@ -24,7 +21,7 @@ export async function POST(req: Request) {
 
         const cleanText = text.replace(/[\*\#\_]/g, '').trim();
 
-        // 1. Synthesize using active Hugging Face XTTS-v2 Space
+        // 1. Synthesize using active Hugging Face XTTS-v2 Space with Sameer Sir's WAV Voice
         try {
             const { Client } = await import("@gradio/client");
 
@@ -37,24 +34,10 @@ export async function POST(req: Request) {
             // Connect to active live XTTS-v2 space
             const client = await Client.connect("hasanbasbunar/Voice-Cloning-XTTS-v2", clientOptions);
 
-            let speakerVoicePath = DEFAULT_SPEAKER_VOICE;
-            if (!fs.existsSync(speakerVoicePath)) {
-                const mpegPath = path.join(process.cwd(), "public", "voices", "sameer-voice.wav.mpeg");
-                if (fs.existsSync(mpegPath)) {
-                    speakerVoicePath = mpegPath;
-                }
-            }
-
-            let audioBlob: Blob | null = null;
-            if (fs.existsSync(speakerVoicePath)) {
-                const fileBuffer = fs.readFileSync(speakerVoicePath);
-                audioBlob = new Blob([fileBuffer], { type: "audio/wav" });
-            }
-
             const result: any = await client.predict("/voice_clone_synthesis", [
-                cleanText,                   // text
-                "",                          // reference_audio_url
-                "audio_1.wav",               // example_audio_name fallback
+                cleanText,                   // text to speak
+                VERCEL_PUBLIC_VOICE_URL,     // reference_audio_url (Sameer Sir's real voice sample)
+                null,                        // example_audio_name (MUST BE null so it uses reference_audio_url)
                 "Hindi",                     // language
                 0.75,                        // temperature
                 1.0,                         // speed
@@ -75,10 +58,11 @@ export async function POST(req: Request) {
 
             if (result?.data?.[0]) {
                 const audioFileUrl = result.data[0]?.url || result.data[0];
-                if (typeof audioFileUrl === "string") {
+                if (typeof audioFileUrl === "string" && audioFileUrl.startsWith("http")) {
                     return NextResponse.json({
                         success: true,
                         audioUrl: audioFileUrl,
+                        cloned: true,
                     });
                 }
             }
@@ -86,7 +70,7 @@ export async function POST(req: Request) {
             console.warn("Hugging Face XTTS synthesis warning:", cloneErr?.message || cloneErr);
         }
 
-        // Graceful fallback to client native TTS if space is busy
+        // Graceful fallback to client native TTS if space is busy or queuing
         return NextResponse.json({
             success: true,
             fallbackTts: true,
